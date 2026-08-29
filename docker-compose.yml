@@ -24,13 +24,17 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/presentations?schema=public
+      DAYTONA_API_KEY: ${DAYTONA_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
       REASONING_EFFORT: ${REASONING_EFFORT:-medium}
       PORT: 3001
+      STORAGE_DIR: /app/storage
     ports:
       - "3001:3001"
+    volumes:
+      - storage:/app/storage
 
   frontend:
     build: ./frontend
@@ -45,3 +49,4 @@ services:
 
 volumes:
   db_data:
+  storage:

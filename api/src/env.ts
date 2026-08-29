@@ -9,18 +9,31 @@ function required(name: string): string {
   return v;
 }
 
+// DeepSeek's thinking scale is low | high | max (+ "none" to disable). It has no
+// "medium" — we accept it as a friendly alias for "high" (the middle rung).
+function reasoningEffort(raw: string | undefined): "low" | "high" | "max" | "off" {
+  switch ((raw ?? "medium").toLowerCase()) {
+    case "off":
+    case "none":
+      return "off";
+    case "low":
+      return "low";
+    case "max":
+      return "max";
+    default: // "medium", "high", or anything unrecognized
+      return "high";
+  }
+}
+
 export const env = {
   port: Number(process.env.PORT ?? 3001),
   databaseUrl: required("DATABASE_URL"),
+  daytonaApiKey: process.env.DAYTONA_API_KEY ?? "",
+  storageDir: process.env.STORAGE_DIR ?? "./storage",
   deepseek: {
     apiKey: process.env.DEEPSEEK_API_KEY ?? "",
     baseUrl: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
     model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
-    // "low" | "medium" | "high" — or "off" to omit the param for non-reasoning models
-    reasoningEffort: (process.env.REASONING_EFFORT ?? "medium") as
-      | "low"
-      | "medium"
-      | "high"
-      | "off",
+    reasoningEffort: reasoningEffort(process.env.REASONING_EFFORT),
   },
 };

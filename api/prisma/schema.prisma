@@ -8,11 +8,13 @@ datasource db {
 }
 
 model Chat {
-  id        String    @id @default(cuid())
-  title     String    @default("New chat")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  messages  Message[]
+  id           String        @id @default(cuid())
+  title        String        @default("New chat")
+  sandboxId    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  messages     Message[]
+  deckVersions DeckVersion[]
 }
 
 enum Role {
@@ -32,4 +34,33 @@ model Message {
   createdAt DateTime @default(now())
 
   @@index([chatId, createdAt])
+}
+
+model DeckVersion {
+  id        String   @id @default(cuid())
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chatId    String
+  version   Int
+  // python-pptx program the model produced for this version
+  buildCode String
+  // the model's reasoning/thinking trace for this version
+  reasoning String?
+  pptxPath  String?
+  pdfPath   String?
+  status    String   @default("pending") // pending | building | ready | error
+  error     String?
+  slides    Slide[]
+  createdAt DateTime @default(now())
+
+  @@unique([chatId, version])
+}
+
+model Slide {
+  id            String      @id @default(cuid())
+  deckVersion   DeckVersion @relation(fields: [deckVersionId], references: [id], onDelete: Cascade)
+  deckVersionId String
+  index         Int
+  imagePath     String
+
+  @@unique([deckVersionId, index])
 }

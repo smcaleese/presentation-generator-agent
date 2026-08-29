@@ -9,15 +9,14 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types";
 
 interface Props {
   messages: ChatMessage[];
   reasoning: string;
-  streamingAnswer: string;
+  streamingCode: string;
+  streamingText: string;
   liveTurn: boolean;
-  thinking: boolean;
   status: string | null;
   disabled: boolean;
   onSend: (text: string) => void;
@@ -26,9 +25,9 @@ interface Props {
 export function ChatPane({
   messages,
   reasoning,
-  streamingAnswer,
+  streamingCode,
+  streamingText,
   liveTurn,
-  thinking,
   status,
   disabled,
   onSend,
@@ -50,18 +49,18 @@ export function ChatPane({
     }
   }
 
-  // the live turn block is shown only while a turn is actively streaming
-  const showLiveTurn = liveTurn;
+  const codeStarted = streamingCode.length > 0;
 
   return (
     <div className="flex h-full flex-col border-r bg-card">
-      <header className="border-b px-4 py-3 text-sm font-semibold">Chat</header>
+      <header className="border-b px-4 py-3 text-sm font-semibold">Presentation</header>
 
       <ScrollArea className="flex-1">
         <div className="space-y-3 p-4">
-          {messages.length === 0 && !showLiveTurn && (
+          {messages.length === 0 && !liveTurn && (
             <p className="text-sm text-muted-foreground">
-              Ask anything. The model's reasoning streams in above its answer.
+              Describe the presentation you want — e.g. “A 6-slide intro to vector
+              databases for engineers.” Then refine it: “make slide 3 a bar chart.”
             </p>
           )}
 
@@ -75,7 +74,8 @@ export function ChatPane({
               </div>
             ) : (
               <div key={m.id} className="space-y-2">
-                {m.reasoning && <ReasoningPanel text={m.reasoning} live={false} />}
+                {m.reasoning && <StreamPanel label="Reasoning" text={m.reasoning} />}
+                {m.code && <StreamPanel label="Code" text={m.code} mono />}
                 <div className="mr-auto max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm whitespace-pre-wrap text-foreground">
                   {m.content}
                 </div>
@@ -83,13 +83,27 @@ export function ChatPane({
             ),
           )}
 
-          {/* live turn: reasoning first, then the answer as it streams */}
-          {showLiveTurn && (
+          {/* live turn: reasoning, then code, then the prose reply */}
+          {liveTurn && (
             <div className="space-y-2">
-              {(reasoning || thinking) && <ReasoningPanel text={reasoning} live={thinking} />}
-              {streamingAnswer && (
+              <StreamPanel
+                label="Reasoning"
+                text={reasoning}
+                live={!codeStarted && !streamingText}
+                badge="thinking…"
+              />
+              {codeStarted && (
+                <StreamPanel
+                  label="Code"
+                  text={streamingCode}
+                  live={!streamingText}
+                  mono
+                  badge="writing…"
+                />
+              )}
+              {streamingText && (
                 <div className="mr-auto max-w-[85%] rounded-lg bg-muted px-3 py-2 text-sm whitespace-pre-wrap text-foreground">
-                  {streamingAnswer}
+                  {streamingText}
                   <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse bg-foreground/50 align-text-bottom" />
                 </div>
               )}
@@ -106,7 +120,7 @@ export function ChatPane({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Send a message…"
+            placeholder="Describe or refine the deck…"
             disabled={disabled}
           />
           <Button type="submit" size="icon" disabled={disabled} aria-label="Send">
@@ -118,16 +132,24 @@ export function ChatPane({
   );
 }
 
-function ReasoningPanel({ text, live }: { text: string; live: boolean }) {
+interface PanelProps {
+  label: string;
+  text: string;
+  live?: boolean;
+  mono?: boolean;
+  badge?: string;
+}
+
+function StreamPanel({ label, text, live = false, mono = false, badge }: PanelProps) {
   const [open, setOpen] = useState(live);
   const bodyRef = useRef<HTMLPreElement>(null);
 
-  // expand automatically while it's actively streaming
+  // open while this panel is the one streaming; collapse once it's done
   useEffect(() => {
-    if (live) setOpen(true);
+    setOpen(live);
   }, [live]);
 
-  // keep the newest reasoning in view while it streams
+  // keep the newest text in view while it streams
   useEffect(() => {
     if (live && open && bodyRef.current) {
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
@@ -142,10 +164,10 @@ function ReasoningPanel({ text, live }: { text: string; live: boolean }) {
     >
       <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-muted-foreground">
         {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        <span>Reasoning</span>
-        {live && (
+        <span>{label}</span>
+        {live && badge && (
           <Badge variant="secondary" className="ml-1 animate-pulse">
-            thinking…
+            {badge}
           </Badge>
         )}
       </CollapsibleTrigger>
@@ -153,7 +175,11 @@ function ReasoningPanel({ text, live }: { text: string; live: boolean }) {
         {text && (
           <pre
             ref={bodyRef}
-            className="max-h-64 overflow-y-auto px-3 pb-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground"
+            className={
+              mono
+                ? "max-h-72 overflow-auto px-3 pb-3 font-mono text-[11px] leading-relaxed text-muted-foreground"
+                : "max-h-64 overflow-y-auto px-3 pb-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground"
+            }
           >
             {text}
           </pre>

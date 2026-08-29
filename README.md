@@ -1,25 +1,33 @@
 # presentation-generator-agent
 
-The conversational core of a presentation-generator agent. **Right now** it's a
-DeepSeek reasoning chatbot: a chat UI where each reply streams the model's
-thinking into a collapsible panel above the answer, with per-chat history in
-Postgres.
+Describe a presentation in chat. The model decides whether to call a
+**`createSlides` tool** — if it does, its `python-pptx` code runs in a **Daytona
+sandbox** to produce a `.pptx`, the API renders that to per-slide PNGs shown in a
+live preview, and the tool's result (slide count, or the Python error) goes back
+to the model so it can fix mistakes and try again. Plain questions / greetings
+get a normal reply with no build. Each successful build is a new version.
 
-Where it's headed — describing a deck in chat and having an agent build it — is in
-[IDEA.md](IDEA.md) and [PLAN.md](PLAN.md).
+The reasoning and the tool's code stream into the chat as collapsible panels.
+Background: [docs/IDEA.md](docs/IDEA.md), [docs/PLAN.md](docs/PLAN.md). Flow
+walkthroughs: [docs/REVIEW.md](docs/REVIEW.md) (message → SSE),
+[docs/DAYTONA_WORKFLOW.md](docs/DAYTONA_WORKFLOW.md) (tool → sandbox → render).
 
 ## Layout
 
 ```
-frontend/   React 19 + Vite 6 + TS + Tailwind 4 + shadcn/ui  — sidebar + chat pane
-api/        Fastify 5 + Prisma 6 + TS                          — chats API, LLM streaming (SSE)
+frontend/   React 19 + Vite 6 + TS + Tailwind 4 + shadcn/ui  — sidebar + chat + slide preview
+api/        Fastify 5 + Prisma 6 + TS                          — chats API, LLM streaming (SSE), deck build + render
 docker-compose.yml                                             — postgres + api + frontend
 .env                                                           — single env file, read by the api
 ```
 
 `frontend/src/types.ts` and `api/src/types.ts` are a hand-maintained shared
-contract — keep them in sync. See [REVIEW.md](REVIEW.md) for a walkthrough of the
-message flow from frontend to backend.
+contract — keep them in sync.
+
+The **API host renders `.pptx → .pdf → .png`** with LibreOffice + poppler (baked
+into `api/Dockerfile`). For local dev outside Docker: `brew install libreoffice
+poppler` (or set `SOFFICE_BIN`). The Daytona sandbox stays a generic Python image
+— `python-pptx` is installed into it at runtime.
 
 ---
 
@@ -31,7 +39,8 @@ message flow from frontend to backend.
 |---|---|---|
 | Node.js | ≥ 22 | `node --version` |
 | npm | ≥ 10 | ships with Node |
-| Docker + Compose | any recent | only used to run Postgres locally |
+| Docker + Compose | any recent | runs Postgres (and the whole stack if you want) |
+| LibreOffice + poppler | any recent | **only for non-Docker local dev** — `brew install libreoffice poppler`. Baked into `api/Dockerfile` otherwise. |
 
 ### 1. Environment file
 
@@ -41,14 +50,16 @@ One `.env` at the repo root:
 cp .env.example .env
 ```
 
-Then set the one required value:
+Then set the required values:
 
 | Variable | Required for | Default |
 |---|---|---|
-| `DEEPSEEK_API_KEY` | the chat model | *(blank — add yours)* |
+| `DEEPSEEK_API_KEY` | writing the `python-pptx` code | *(blank — add yours)* |
+| `DAYTONA_API_KEY` | running that code in a sandbox | *(blank — add yours)* |
+| `STORAGE_DIR` | where generated `.pptx` / `.pdf` / slide PNGs are written | `./storage` |
 | `DEEPSEEK_BASE_URL` | — | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | — | `deepseek-v4-flash` (a reasoning model; its thinking trace streams to the chat pane) |
-| `REASONING_EFFORT` | — | `medium` — `low` / `medium` / `high`; `off` disables the thinking toggle |
+| `REASONING_EFFORT` | — | `medium` — `low` / `medium` / `high` / `max` (DeepSeek has no true medium; it maps to `high`); `off` disables thinking |
 | `DATABASE_URL` | api ↔ Postgres | points at `localhost:5432` |
 | `PORT` | api listen port | `3001` |
 
@@ -92,9 +103,17 @@ no CORS setup in dev.
 
 ### 5. Use it
 
-A chat is created automatically. **New chat** (top-left) makes more; the first
-message names the chat. Type anything — the model's reasoning streams into a
-collapsible panel above each answer, and the whole conversation is saved per chat.
+A chat is created automatically (**New chat**, top-left, makes more). Describe a
+deck — *"A 6-slide intro to vector databases for engineers."* — and the model
+calls `createSlides`: **Reasoning** and **Code** panels stream in, the status line
+shows `running in sandbox → rendering slides`, then the slides appear in the
+preview and the model writes a short summary. Refine with follow-ups
+(*"make slide 3 a bar chart"*) — each is a new version in the same warm sandbox.
+Say *"hi"* and it just replies — no build.
+
+First build in a chat is slower (sandbox cold start, ~5–15 s); later edits reuse
+the sandbox (~2–5 s + render). If the model's code errors, the error is fed back
+and it retries automatically.
 
 ---
 
@@ -137,4 +156,36 @@ docker compose up --build
 | `[tsx] Previous process hasn't exited yet` | stale dev server — `pkill -f "tsx watch"` |
 | API exits with a Postgres connection error | `docker compose up -d db` and wait a few seconds |
 | Chat replies with `Error: 401` | `DEEPSEEK_API_KEY` missing or invalid in the root `.env` |
+| `Build failed: … spawn soffice ENOENT` | LibreOffice not on PATH — `brew install libreoffice poppler`, or run via Docker, or set `SOFFICE_BIN` |
+| `Build failed: could not install python-pptx in sandbox` | check `DAYTONA_API_KEY`; the sandbox needs outbound network for `pip` |
 | Port 3001 / 5173 / 5432 already in use | stop the other process, or change `PORT` / the compose port mappings |
+
+---
+
+## Status
+
+| Piece | State |
+|---|---|
+| Agent loop (`runTurn`) — `createSlides` tool, `tool_choice: "auto"`, retry-on-error | ✅ |
+| DeepSeek **Responses API** — streaming, thinking, tools; `reasoning` items replayed (stateless + tools) | ✅ |
+| `runBuildInSandbox` — generic Daytona sandbox, runtime `pip install python-pptx`, run, download `.pptx` | ✅ |
+| `pptxToSlides` — `soffice` → PDF, `pdftoppm` → per-slide PNG (on the API host) | ✅ |
+| `DeckVersion` / `Slide` + `/api/files/*`; sandbox reuse via `Chat.sandboxId`; `DELETE` frees the sandbox | ✅ |
+| `SlideViewer` carousel; Reasoning + Code panels + prose bubble in `App.tsx` | ✅ |
+| Custom Daytona snapshot (skip runtime `pip install`) | ⬜ optional speed-up |
+| Persisting per-step tool messages (currently one collapsed assistant `Message` per turn) | ⬜ |
+
+See [docs/DAYTONA_WORKFLOW.md](docs/DAYTONA_WORKFLOW.md) for the full flow.
+
+---
+
+## Docs
+
+| File | What |
+|---|---|
+| [docs/REVIEW.md](docs/REVIEW.md) | message-send flow, frontend → backend, with code |
+| [docs/DAYTONA_WORKFLOW.md](docs/DAYTONA_WORKFLOW.md) | how the deck build + render works (current design) |
+| [docs/example-build.py](docs/example-build.py) | a representative `python-pptx` program the model produces |
+| [docs/DAYTONA_PLAN.md](docs/DAYTONA_PLAN.md) | the phased plan it was built from (implemented) |
+| [docs/IDEA.md](docs/IDEA.md) | the presentation-generator concept |
+| [docs/PLAN.md](docs/PLAN.md) | build plan / tech-stack notes |

@@ -1,99 +1,123 @@
 import OpenAI from "openai";
 import { env } from "./env.js";
 
-// DeepSeek is OpenAI-compatible — just point the client at its base URL.
+// DeepSeek is OpenAI-compatible — this uses its Responses API.
 export const llm = new OpenAI({
-  // Placeholder keeps the client constructible before a key is configured;
-  // an actual request will 401 until DEEPSEEK_API_KEY is set.
   apiKey: env.deepseek.apiKey || "missing-deepseek-api-key",
   baseURL: env.deepseek.baseUrl,
 });
 
-export interface StreamHandlers {
-  /** Called with each reasoning/thinking token as it streams in. */
-  onReasoning?: (delta: string) => void;
-  /** Called with each answer token as it streams in. */
-  onContent?: (delta: string) => void;
+export type InputItem = OpenAI.Responses.ResponseInputItem;
+export type OutputItem = OpenAI.Responses.ResponseOutputItem;
+
+export interface AgentHandlers {
+  onReasoning?: (delta: string) => void; // thinking text
+  onText?: (delta: string) => void; // the assistant's prose reply
+  onCode?: (delta: string) => void; // raw createSlides({code}) argument fragments
 }
 
-export interface ChatTurn {
-  role: "user" | "assistant" | "system";
-  content: string;
+export type FunctionCall = OpenAI.Responses.ResponseFunctionToolCall;
+
+export interface AgentStep {
+  text: string;
+  reasoningText: string;
+  /** the model's output items verbatim (reasoning + function_call + message),
+   *  replayed on the next request — DeepSeek requires reasoning items passed
+   *  back when tools are enabled */
+  outputItems: OutputItem[];
+  /** every function_call the model made this step (parallel calls are always on) */
+  functionCalls: FunctionCall[];
 }
 
-export interface ChatResult {
-  content: string;
-  reasoning: string;
-}
+const INSTRUCTIONS = `You are a presentation-building assistant.
 
-// Reasoning tokens arrive under a provider-specific delta field:
-// DeepSeek -> reasoning_content, OpenRouter/others -> reasoning.
-interface ReasoningDelta {
-  content?: string | null;
-  reasoning_content?: string | null;
-  reasoning?: string | null;
-}
+When the user asks for a slide deck, or a change to one, call the \`createSlides\`
+tool with a COMPLETE Python program that uses python-pptx to write "deck.pptx" in
+the current working directory. The tool runs your program and replies with either
+the slide count (success) or the Python error output. If it returns an error,
+read it and call \`createSlides\` again with a corrected program.
 
-const CHAT_SYSTEM_PROMPT =
-  "You are a helpful assistant. Think through the problem step by step, then give a clear, concise answer.";
+If you are shown the program that built the current deck, treat the request as an
+edit: change only what the user asked for.
 
-type Msg = OpenAI.Chat.ChatCompletionMessageParam;
+For anything that does not need slides — greetings, questions, clarifications —
+just reply normally and do NOT call the tool.
+
+Keep replies to the user brief.`;
+
+const createSlidesTool: OpenAI.Responses.FunctionTool = {
+  type: "function",
+  name: "createSlides",
+  description:
+    "Build or revise the slide deck by running a python-pptx program that writes deck.pptx.",
+  strict: false,
+  parameters: {
+    type: "object",
+    properties: {
+      code: {
+        type: "string",
+        description:
+          'A complete Python program using python-pptx that saves the presentation as "deck.pptx" in the current directory. Do not touch any other path.',
+      },
+    },
+    required: ["code"],
+  },
+};
 
 /**
- * Build the streaming request. When reasoning is on we send both the standard
- * `reasoning_effort` and DeepSeek V4's `thinking` toggle (the TS SDK has no
- * `extra_body`, so the non-standard field goes inline).
+ * One step of the agent loop on the Responses API. Streams reasoning / prose /
+ * code fragments to `handlers`; returns the assembled text plus the raw output
+ * items (needed to replay reasoning on the next request).
  */
-function streamRequest(messages: Msg[]): OpenAI.Chat.ChatCompletionCreateParamsStreaming {
-  const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming & Record<string, unknown> = {
+export async function streamAgentStep(
+  input: InputItem[],
+  handlers: AgentHandlers = {},
+): Promise<AgentStep> {
+  const params: OpenAI.Responses.ResponseCreateParamsStreaming & Record<string, unknown> = {
     model: env.deepseek.model,
+    instructions: INSTRUCTIONS,
+    input,
+    tools: [createSlidesTool],
+    tool_choice: "auto",
     stream: true,
-    messages,
+    // DeepSeek: "none" disables thinking; "low" | "high" | "max" set effort.
+    reasoning: { effort: env.deepseek.reasoningEffort === "off" ? "none" : env.deepseek.reasoningEffort },
   };
-  if (env.deepseek.reasoningEffort !== "off") {
-    params.reasoning_effort = env.deepseek.reasoningEffort;
-    params.thinking = { type: "enabled" }; // DeepSeek V4 — ignored by models that don't know it
-  }
-  return params;
-}
 
-/** Consume the stream, routing reasoning vs answer deltas to the handlers. */
-async function consume(
-  stream: AsyncIterable<OpenAI.Chat.ChatCompletionChunk>,
-  handlers: StreamHandlers,
-): Promise<ChatResult> {
-  let content = "";
-  let reasoning = "";
-  for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta as ReasoningDelta | undefined;
-    if (!delta) continue;
+  const stream = await llm.responses.create(params);
 
-    const r = delta.reasoning_content ?? delta.reasoning;
-    if (r) {
-      reasoning += r;
-      handlers.onReasoning?.(r);
+  let text = "";
+  let reasoningText = "";
+  let outputItems: OutputItem[] = [];
+
+  for await (const event of stream) {
+    switch (event.type) {
+      case "response.reasoning_text.delta":
+        reasoningText += event.delta;
+        handlers.onReasoning?.(event.delta);
+        break;
+      case "response.output_text.delta":
+        text += event.delta;
+        handlers.onText?.(event.delta);
+        break;
+      case "response.function_call_arguments.delta":
+        handlers.onCode?.(event.delta);
+        break;
+      case "response.completed":
+        outputItems = event.response.output;
+        break;
+      case "response.failed":
+        throw new Error(event.response.error?.message ?? "response failed");
+      case "response.incomplete":
+        throw new Error(
+          `response incomplete: ${event.response.incomplete_details?.reason ?? "unknown"}`,
+        );
     }
-    if (delta.content) {
-      content += delta.content;
-      handlers.onContent?.(delta.content);
-    }
   }
-  return { content, reasoning };
-}
 
-/**
- * Stream a normal conversational reply. Yields reasoning + answer tokens via
- * `handlers` and returns the fully assembled result.
- *
- * `reasoning_content` from a prior turn may be left on assistant history
- * messages — DeepSeek ignores it. This app stores it in `Message.meta` instead
- * and only replays `content`.
- */
-export async function streamChat(
-  history: ChatTurn[],
-  handlers: StreamHandlers = {},
-): Promise<ChatResult> {
-  const messages: Msg[] = [{ role: "system", content: CHAT_SYSTEM_PROMPT }, ...history];
-  const stream = await llm.chat.completions.create(streamRequest(messages));
-  return consume(stream, handlers);
+  const functionCalls = outputItems.filter(
+    (it): it is FunctionCall => it.type === "function_call",
+  );
+
+  return { text, reasoningText, outputItems, functionCalls };
 }

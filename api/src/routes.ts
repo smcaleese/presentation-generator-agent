@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "./db.js";
-import { runChatTurn } from "./pipeline.js";
+import { deleteSandbox } from "./daytona.js";
+import { runTurn, toDeckDto } from "./pipeline.js";
 import type { ChatDto, ChatSummary, ServerEvent } from "./types.js";
 
 const DEFAULT_TITLE = "New chat";
@@ -46,33 +47,44 @@ export async function registerRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const chat = await prisma.chat.findUnique({
       where: { id },
-      include: { messages: { orderBy: { createdAt: "asc" } } },
+      include: {
+        messages: { orderBy: { createdAt: "asc" } },
+        deckVersions: {
+          orderBy: { version: "desc" },
+          take: 1,
+          include: { slides: { orderBy: { index: "asc" } } },
+        },
+      },
     });
     if (!chat) return reply.code(404).send({ error: "not found" });
 
     return {
       id: chat.id,
       title: chat.title,
-      messages: chat.messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        reasoning:
-          m.meta && typeof m.meta === "object" && "reasoning" in m.meta
-            ? String((m.meta as { reasoning?: unknown }).reasoning ?? "")
-            : undefined,
-        createdAt: m.createdAt.toISOString(),
-      })),
+      messages: chat.messages.map((m) => {
+        const meta = (m.meta ?? {}) as { reasoning?: unknown; buildCode?: unknown };
+        return {
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          reasoning: meta.reasoning ? String(meta.reasoning) : undefined,
+          code: meta.buildCode ? String(meta.buildCode) : undefined,
+          createdAt: m.createdAt.toISOString(),
+        };
+      }),
+      latestDeck: chat.deckVersions[0] ? toDeckDto(chat.deckVersions[0]) : undefined,
     };
   });
 
   app.delete("/api/chats/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
+    const chat = await prisma.chat.findUnique({ where: { id }, select: { sandboxId: true } });
+    if (chat?.sandboxId) await deleteSandbox(chat.sandboxId).catch(() => {});
     await prisma.chat.delete({ where: { id } }).catch(() => {});
     return reply.code(204).send();
   });
 
-  // --- chat turn: streams reasoning + answer tokens over SSE ---
+  // --- deck build turn: streams reasoning + code + build progress over SSE ---
   const bodySchema = z.object({ content: z.string().min(1) });
 
   app.post("/api/chats/:id/messages", async (req, reply) => {
@@ -115,7 +127,7 @@ export async function registerRoutes(app: FastifyInstance) {
     }
 
     try {
-      await runChatTurn(id, emit);
+      await runTurn(id, content, emit);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       emit({ type: "error", error: message });

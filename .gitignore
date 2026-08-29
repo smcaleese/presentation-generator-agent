@@ -20,5 +20,11 @@ npm-debug.log*
 # Prisma
 api/prisma/*.db
 
+# Generated slide assets
+storage/
+
 # TS build info
 *.tsbuildinfo
+
+# scratch/experiment files
+_scratch*

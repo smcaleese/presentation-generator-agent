@@ -10,7 +10,9 @@
     "prisma:generate": "dotenv -e ../.env -- prisma generate",
     "prisma:migrate": "dotenv -e ../.env -- prisma migrate dev",
     "prisma:studio": "dotenv -e ../.env -- prisma studio",
-    "prisma:deploy": "prisma migrate deploy"
+    "prisma:deploy": "prisma migrate deploy",
+    "sandboxes:list": "dotenv -e ../.env -- tsx scripts/prune-sandboxes.ts",
+    "sandboxes:prune": "dotenv -e ../.env -- tsx scripts/prune-sandboxes.ts --delete"
   },
   "dependencies": {
     "@daytona/sdk": "^0.207.0",
