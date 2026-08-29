@@ -208,12 +208,17 @@ async function runBuild(chatId: string, code: string, emit: Emit): Promise<Build
   }
 }
 
+const fileUrl = (path: string, downloadAs?: string) =>
+  `/api/files/${encodeURIComponent(path)}${downloadAs ? `?download=${encodeURIComponent(downloadAs)}` : ""}`;
+
 export function toDeckDto(deck: {
   id: string;
   version: number;
   status: string;
   error: string | null;
   reasoning?: string | null;
+  pptxPath?: string | null;
+  pdfPath?: string | null;
   slides: { index: number; imagePath: string }[];
 }): DeckVersionDto {
   return {
@@ -222,9 +227,11 @@ export function toDeckDto(deck: {
     status: deck.status as DeckVersionDto["status"],
     error: deck.error ?? undefined,
     reasoning: deck.reasoning ?? undefined,
+    pptxUrl: deck.pptxPath ? fileUrl(deck.pptxPath, `deck-v${deck.version}.pptx`) : undefined,
+    pdfUrl: deck.pdfPath ? fileUrl(deck.pdfPath, `deck-v${deck.version}.pdf`) : undefined,
     slides: deck.slides.map((s) => ({
       index: s.index,
-      imageUrl: `/api/files/${encodeURIComponent(s.imagePath)}`,
+      imageUrl: fileUrl(s.imagePath),
     })),
   };
 }

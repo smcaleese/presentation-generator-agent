@@ -115,6 +115,10 @@ First build in a chat is slower (sandbox cold start, ~5–15 s); later edits reu
 the sandbox (~2–5 s + render). If the model's code errors, the error is fed back
 and it retries automatically.
 
+The three panes each scroll independently and their borders are draggable (sizes
+persist per browser). When a deck is ready, the preview footer has **PPTX** and
+**PDF** download buttons.
+
 ---
 
 ## Running everything in Docker

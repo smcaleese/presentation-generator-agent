@@ -11,7 +11,14 @@ const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
 await registerRoutes(app);
 
-// Serve generated slide PNGs / PDFs from STORAGE_DIR.
+const CONTENT_TYPES: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".png": "image/png",
+};
+
+// Serve generated slide PNGs / PDFs / PPTX from STORAGE_DIR.
+// `?download=<name>` forces a download with that filename.
 app.get("/api/files/*", async (req, reply) => {
   const requested = resolve((req.params as { "*": string })["*"]);
   const root = resolve(env.storageDir);
@@ -21,7 +28,14 @@ app.get("/api/files/*", async (req, reply) => {
   } catch {
     return reply.code(404).send({ error: "not found" });
   }
-  reply.type(requested.endsWith(".pdf") ? "application/pdf" : "image/png");
+  const ext = requested.slice(requested.lastIndexOf(".")).toLowerCase();
+  reply.type(CONTENT_TYPES[ext] ?? "application/octet-stream");
+
+  const download = (req.query as { download?: string }).download;
+  if (download) {
+    const safe = download.replace(/[^\w.-]/g, "_");
+    reply.header("Content-Disposition", `attachment; filename="${safe}"`);
+  }
   return reply.send(createReadStream(requested));
 });
 

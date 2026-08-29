@@ -3,6 +3,11 @@ import { createChat, deleteChat, getChat, listChats, sendMessage } from "@/api";
 import { ChatPane } from "@/components/ChatPane";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { SlideViewer } from "@/components/SlideViewer";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import type { ChatMessage, ChatSummary, DeckVersionDto } from "@/types";
 
 export default function App() {
@@ -143,25 +148,37 @@ export default function App() {
   }
 
   return (
-    <div className="grid h-full grid-cols-[220px_minmax(340px,1fr)_1.2fr] bg-background text-foreground">
-      <ChatSidebar
-        chats={chats}
-        activeId={activeId}
-        onSelect={handleSelect}
-        onCreate={handleCreate}
-        onDelete={handleDelete}
-      />
-      <ChatPane
-        messages={messages}
-        reasoning={reasoning}
-        streamingCode={streamingCode}
-        streamingText={streamingText}
-        liveTurn={liveTurn}
-        status={status}
-        disabled={busy || !activeId}
-        onSend={handleSend}
-      />
-      <SlideViewer deck={deck} building={building} />
-    </div>
+    <ResizablePanelGroup
+      direction="horizontal"
+      autoSaveId="pga-layout"
+      className="h-screen bg-background text-foreground"
+    >
+      <ResizablePanel defaultSize={18} minSize={12} maxSize={32} className="min-w-0">
+        <ChatSidebar
+          chats={chats}
+          activeId={activeId}
+          onSelect={handleSelect}
+          onCreate={handleCreate}
+          onDelete={handleDelete}
+        />
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize={45} minSize={25} className="min-w-0">
+        <ChatPane
+          messages={messages}
+          reasoning={reasoning}
+          streamingCode={streamingCode}
+          streamingText={streamingText}
+          liveTurn={liveTurn}
+          status={status}
+          disabled={busy || !activeId}
+          onSend={handleSend}
+        />
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize={37} minSize={20} className="min-w-0">
+        <SlideViewer deck={deck} building={building} />
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

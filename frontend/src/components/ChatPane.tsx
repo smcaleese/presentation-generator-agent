@@ -52,10 +52,10 @@ export function ChatPane({
   const codeStarted = streamingCode.length > 0;
 
   return (
-    <div className="flex h-full flex-col border-r bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border-r bg-card">
       <header className="border-b px-4 py-3 text-sm font-semibold">Presentation</header>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-3 p-4">
           {messages.length === 0 && !liveTurn && (
             <p className="text-sm text-muted-foreground">

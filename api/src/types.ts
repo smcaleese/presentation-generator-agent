@@ -23,6 +23,8 @@ export interface DeckVersionDto {
   status: "pending" | "building" | "ready" | "error";
   error?: string;
   reasoning?: string;
+  pptxUrl?: string;
+  pdfUrl?: string;
   slides: SlideDto[];
 }
 

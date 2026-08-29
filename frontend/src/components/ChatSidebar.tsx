@@ -14,7 +14,7 @@ interface Props {
 
 export function ChatSidebar({ chats, activeId, onSelect, onCreate, onDelete }: Props) {
   return (
-    <div className="flex h-full flex-col border-r bg-muted/30">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border-r bg-muted/30">
       <div className="p-3">
         <Button onClick={onCreate} className="w-full justify-start gap-2" size="sm">
           <MessageSquarePlus className="size-4" />
@@ -22,7 +22,7 @@ export function ChatSidebar({ chats, activeId, onSelect, onCreate, onDelete }: P
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <ul className="space-y-0.5 px-2 pb-2">
           {chats.length === 0 && (
             <li className="px-2 py-1.5 text-xs text-muted-foreground">No chats yet</li>
