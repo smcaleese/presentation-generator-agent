@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "./db.js";
 import { env } from "./env.js";
 import { runTurn, toDeckDto } from "./pipeline.js";
-import type { ChatDto, ChatSummary, ServerEvent } from "./types.js";
+import type { ChatDto, ChatMessage, ChatSummary, ServerEvent } from "./types.js";
 
 const DEFAULT_TITLE = "New chat";
 
@@ -52,8 +52,8 @@ export async function registerRoutes(app: FastifyInstance) {
       include: {
         messages: { orderBy: { createdAt: "asc" } },
         deckVersions: {
-          orderBy: { version: "desc" },
-          take: 1,
+          where: { status: "ready" },
+          orderBy: { version: "asc" },
           include: { slides: { orderBy: { index: "asc" } } },
         },
       },
@@ -64,18 +64,30 @@ export async function registerRoutes(app: FastifyInstance) {
       id: chat.id,
       title: chat.title,
       messages: chat.messages.map((m) => {
-        const meta = (m.meta ?? {}) as { reasoning?: unknown; buildCode?: unknown };
+        const meta = (m.meta ?? {}) as { reasoning?: unknown; buildCode?: unknown; deck?: ChatMessage["deck"] };
         return {
           id: m.id,
           role: m.role,
           content: m.content,
           reasoning: meta.reasoning ? String(meta.reasoning) : undefined,
           code: meta.buildCode ? String(meta.buildCode) : undefined,
+          deck: meta.deck,
           createdAt: m.createdAt.toISOString(),
         };
       }),
-      latestDeck: chat.deckVersions[0] ? toDeckDto(chat.deckVersions[0]) : undefined,
+      decks: chat.deckVersions.map(toDeckDto),
     };
+  });
+
+  app.patch("/api/chats/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = z.object({ title: z.string().trim().min(1).max(80) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "title must be 1-80 characters" });
+    const chat = await prisma.chat
+      .update({ where: { id }, data: { title: parsed.data.title } })
+      .catch(() => null);
+    if (!chat) return reply.code(404).send({ error: "not found" });
+    return { id: chat.id, title: chat.title };
   });
 
   app.delete("/api/chats/:id", async (req, reply) => {

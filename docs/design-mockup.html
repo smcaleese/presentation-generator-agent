@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Presentation Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f6f8;
+    --surface: #ffffff;
+    --sidebar: #f0f0f3;
+    --border: #e4e4e9;
+    --text: #17171c;
+    --muted: #6b6b76;
+    --accent: #4f46e5;
+    --accent-fg: #ffffff;
+    --accent-soft: #eeedfd;
+    --hover: rgba(20, 20, 40, .06);
+    --danger: #dc2626;
+    --code-bg: #f4f4f7;
+    --shadow-lg: 0 10px 30px rgba(20, 20, 40, .12), 0 2px 6px rgba(20, 20, 40, .06);
+    --ring: 0 0 0 3px rgba(79, 70, 229, .35);
+    --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --sb-w: 280px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c0c0f; --surface: #131317; --sidebar: #0f0f13; --border: #26262d;
+      --text: #f2f2f5; --muted: #9a9aa6; --accent: #8b85ff; --accent-fg: #0c0c0f;
+      --accent-soft: rgba(139, 133, 255, .14); --hover: rgba(255, 255, 255, .07);
+      --danger: #f87171; --code-bg: #1a1a20;
+      --shadow-lg: 0 10px 30px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .4);
+      --ring: 0 0 0 3px rgba(139, 133, 255, .4);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c0c0f; --surface: #131317; --sidebar: #0f0f13; --border: #26262d;
+    --text: #f2f2f5; --muted: #9a9aa6; --accent: #8b85ff; --accent-fg: #0c0c0f;
+    --accent-soft: rgba(139, 133, 255, .14); --hover: rgba(255, 255, 255, .07);
+    --danger: #f87171; --code-bg: #1a1a20;
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .4);
+    --ring: 0 0 0 3px rgba(139, 133, 255, .4);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 14px/1.5 var(--font);
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: none; box-shadow: var(--ring); }
+  .i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- shared controls ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 34px; padding: 0 12px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    font-weight: 500; white-space: nowrap;
+    transition: background .15s, border-color .15s, opacity .15s;
+  }
+  .btn:hover:not(:disabled) { background: var(--hover); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .btn.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+  .icon-btn {
+    display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px;
+    border: 0; background: transparent; color: var(--muted);
+    transition: background .15s, color .15s;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--text); }
+
+  /* ---------- app grid ---------- */
+  .app {
+    display: grid;
+    grid-template-columns: var(--sb-w) minmax(0, 1fr) minmax(0, 1.15fr);
+    height: 100dvh;
+    transition: grid-template-columns .22s ease;
+  }
+  .app[data-collapsed="true"] { --sb-w: 64px; }
+
+  /* ---------- sidebar ---------- */
+  .sidebar {
+    display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+    background: var(--sidebar); border-right: 1px solid var(--border);
+  }
+  .sb-head { display: flex; align-items: center; gap: 8px; padding: 12px 10px 10px 12px; flex: none; }
+  .sb-head .btn { flex: 1; justify-content: flex-start; height: 38px; }
+  .logo {
+    display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; flex: none;
+    background: var(--accent); color: var(--accent-fg);
+  }
+  .sb-label { padding: 8px 20px 6px; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .chats { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; flex: 1; }
+  .chat-item {
+    position: relative; display: flex; align-items: center; border-radius: 9px; margin-bottom: 2px;
+  }
+  .chat-item:hover, .chat-item.menu-open { background: var(--hover); }
+  .chat-item.active { background: var(--surface); box-shadow: 0 0 0 1px var(--border); }
+  .chat-btn {
+    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; height: 38px; padding: 0 8px 0 10px;
+    border: 0; background: none; text-align: left; border-radius: 9px; color: var(--text);
+  }
+  .chat-btn .i { color: var(--muted); }
+  .chat-item.active .chat-btn .i { color: var(--accent); }
+  .chat-btn .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .more { opacity: 0; margin-right: 4px; width: 28px; height: 28px; }
+  .chat-item:hover .more, .chat-item.active .more, .chat-item.menu-open .more, .more:focus-visible { opacity: 1; }
+  .rename-input {
+    flex: 1; min-width: 0; height: 28px; margin: 0 8px 0 0; padding: 0 8px; border-radius: 7px;
+    border: 1px solid var(--accent); background: var(--surface); box-shadow: var(--ring);
+  }
+  .sb-foot { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 12px 16px; border-top: 1px solid var(--border); flex: none; color: var(--muted); font-size: 12px; }
+
+  @media (min-width: 901px) {
+    .app[data-collapsed="true"] .sb-label,
+    .app[data-collapsed="true"] .chats,
+    .app[data-collapsed="true"] .sb-foot span,
+    .app[data-collapsed="true"] .sb-head .btn span { display: none; }
+    .app[data-collapsed="true"] .sb-head { flex-direction: column; gap: 8px; padding: 12px 0; }
+    .app[data-collapsed="true"] #toggleSidebar { order: -1; }
+    .app[data-collapsed="true"] .sb-head .btn { flex: none; width: 40px; padding: 0; justify-content: center; }
+    .app[data-collapsed="true"] .sb-foot { justify-content: center; padding: 10px 0 12px; }
+    .app[data-collapsed="true"] .sb-spacer { flex: 1; }
+  }
+
+  /* ---------- floating menu ---------- */
+  .menu {
+    position: fixed; z-index: 50; min-width: 168px; padding: 4px; border-radius: 11px;
+    background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg);
+  }
+  .menu[hidden] { display: none; }
+  .menu button {
+    display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 0 10px;
+    border: 0; border-radius: 7px; background: none; text-align: left;
+  }
+  .menu button:hover, .menu button:focus-visible { background: var(--hover); box-shadow: none; }
+  .menu button.danger { color: var(--danger); }
+  .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 2px; }
+
+  /* ---------- chat panel ---------- */
+  .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); border-right: 1px solid var(--border); }
+  .panel-head {
+    display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 16px; flex: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-head h1, .panel-head h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.005em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .panel-head .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .panel-head .grow { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+  .only-mobile { display: none; }
+
+  .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 20px 8px; scroll-behavior: smooth; }
+  .thread { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  .msg { display: flex; gap: 12px; }
+  .msg.user { justify-content: flex-end; }
+  .bubble {
+    max-width: 82%; padding: 9px 14px; border-radius: 16px 16px 4px 16px;
+    background: var(--accent); color: var(--accent-fg); overflow-wrap: anywhere;
+  }
+  .avatar {
+    display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; flex: none; margin-top: 1px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .body p { margin: 0; overflow-wrap: anywhere; }
+  .fold { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+  .fold summary {
+    display: flex; align-items: center; gap: 8px; padding: 7px 12px; list-style: none; cursor: pointer;
+    color: var(--muted); font-size: 12.5px; font-weight: 500; user-select: none;
+  }
+  .fold summary::-webkit-details-marker { display: none; }
+  .fold summary .chev { transition: transform .15s; }
+  .fold[open] summary .chev { transform: rotate(180deg); }
+  .fold summary:hover { color: var(--text); }
+  .fold-body { padding: 4px 14px 12px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+  .fold-body p { padding-top: 8px; }
+  pre.code {
+    margin: 0; padding: 12px 14px; overflow-x: auto; background: var(--code-bg);
+    font: 12.5px/1.6 var(--mono); color: var(--text); border-top: 1px solid var(--border);
+  }
+  .deck-chip {
+    display: flex; align-items: center; gap: 12px; width: 100%; max-width: 340px; padding: 10px 12px; text-align: left;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+    transition: border-color .15s, background .15s;
+  }
+  .deck-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .deck-chip .thumb {
+    display: grid; place-items: center; width: 44px; aspect-ratio: 16/9; border-radius: 6px; flex: none;
+    background: linear-gradient(135deg, #312e81, #4f46e5); color: #fff;
+  }
+  .deck-chip .thumb .i { width: 14px; height: 14px; }
+  .deck-chip b { display: block; font-weight: 600; }
+  .deck-chip small { color: var(--muted); font-size: 12px; }
+  .deck-chip .grow { flex: 1; min-width: 0; }
+  .deck-chip > .i { color: var(--muted); }
+  .status { display: flex; align-items: center; gap: 10px; color: var(--muted); padding-top: 4px; }
+  .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty { max-width: 520px; margin: 9vh auto 0; text-align: center; }
+  .empty .logo { width: 44px; height: 44px; border-radius: 13px; margin: 0 auto 16px; }
+  .empty .logo .i { width: 22px; height: 22px; }
+  .empty h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: -.02em; }
+  .empty p { margin: 0 0 20px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chip { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); }
+  .chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+  .composer-wrap { padding: 8px 20px 22px; flex: none; }
+  .composer {
+    max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 18px 14px 14px 20px;
+    border: 1px solid var(--border); border-radius: 22px; background: var(--surface);
+    box-shadow: 0 1px 2px rgba(20, 20, 40, .04);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .composer:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+  .composer textarea {
+    width: 100%; border: 0; outline: 0; resize: none; background: transparent; padding: 0;
+    min-height: 56px; max-height: 200px; font-size: 15px; line-height: 1.6;
+  }
+  .composer textarea:focus,
+  .composer textarea:focus-visible { outline: 0; box-shadow: none; } /* the outer box shows the focus ring */
+  .composer textarea::placeholder { color: var(--muted); }
+  .composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .hint { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
+  .send {
+    display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; border: 0; flex: none; margin-left: auto;
+    background: var(--accent); color: var(--accent-fg); transition: opacity .15s;
+  }
+  .send:disabled { opacity: .3; cursor: not-allowed; }
+
+  /* ---------- preview panel ---------- */
+  .preview { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+  .preview .panel-head { background: var(--surface); }
+  .badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 600; }
+  .actions { display: flex; gap: 8px; margin-left: auto; }
+  .stage { flex: 1; min-height: 0; padding: 28px; display: grid; place-items: center; container-type: size; }
+  .slide {
+    position: relative; width: min(100cqw, 100cqh * 16 / 9); aspect-ratio: 16 / 9; overflow: hidden;
+    border-radius: 12px; background: #fff; color: #17171c; box-shadow: var(--shadow-lg);
+    container-type: inline-size;
+  }
+  .slide .s { position: absolute; inset: 0; padding: 6cqw 7cqw; display: flex; flex-direction: column; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .s-title { justify-content: center; background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 60%, #6366f1 100%); color: #fff; }
+  .s-title .kick { font-size: 1.7cqw; letter-spacing: .18em; text-transform: uppercase; opacity: .7; margin-bottom: 2.2cqw; }
+  .s-title h1 { margin: 0; font-size: 6.4cqw; line-height: 1.05; letter-spacing: -.03em; }
+  .s-title p { margin: 2.2cqw 0 0; font-size: 2.4cqw; opacity: .8; }
+  .s-body h2 { margin: 0 0 3.2cqw; font-size: 3.6cqw; letter-spacing: -.02em; color: #1e1b4b; }
+  .s-body h2::after { content: ""; display: block; width: 5cqw; height: .5cqw; margin-top: 1.2cqw; border-radius: 9px; background: #4f46e5; }
+  .s-body ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 1.8cqw; }
+  .s-body li { position: relative; padding-left: 3cqw; font-size: 2.5cqw; line-height: 1.3; }
+  .s-body li::before { content: ""; position: absolute; left: 0; top: .9cqw; width: 1.1cqw; height: 1.1cqw; border-radius: 50%; background: #4f46e5; }
+  .s-body table { width: 100%; border-collapse: collapse; font-size: 2.1cqw; }
+  .s-body th, .s-body td { text-align: left; padding: 1.3cqw 1.6cqw; border-bottom: .15cqw solid #e5e7eb; }
+  .s-body th { font-size: 1.8cqw; text-transform: uppercase; letter-spacing: .08em; color: #6b7280; }
+  .s-body td:first-child { font-weight: 600; color: #1e1b4b; }
+  .s-body pre { margin: 0; padding: 2.4cqw 2.8cqw; border-radius: 1.2cqw; background: #14142b; color: #e0e7ff; font: 2cqw/1.6 var(--mono); overflow: hidden; }
+  .empty-preview { text-align: center; color: var(--muted); }
+  .empty-preview .ph { width: min(70%, 460px); aspect-ratio: 16/9; margin: 0 auto 18px; border: 2px dashed var(--border); border-radius: 14px; display: grid; place-items: center; }
+  .empty-preview .ph .i { width: 32px; height: 32px; opacity: .6; }
+  .empty-preview h3 { margin: 0 0 4px; color: var(--text); font-size: 15px; }
+  .empty-preview p { margin: 0; }
+
+  .pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 12px 16px 16px; flex: none; }
+  .dots { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 99px; border: 0; padding: 0; background: var(--border); transition: width .2s, background .2s; }
+  .dot:hover { background: var(--muted); }
+  .dot[aria-current="true"] { width: 20px; background: var(--accent); }
+  .count { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+
+  /* ---------- toast + backdrop + tabs ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 11px;
+    background: var(--text); color: var(--bg); box-shadow: var(--shadow-lg);
+    transition: opacity .2s, transform .2s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .backdrop { display: none; }
+  .tabs { display: none; }
+
+  @media (max-width: 900px) {
+    .app { grid-template-columns: minmax(0, 1fr); }
+    .sidebar {
+      position: fixed; inset: 0 auto 0 0; width: 288px; z-index: 40;
+      transform: translateX(-100%); transition: transform .22s ease;
+    }
+    .app[data-collapsed="false"] .sidebar { transform: none; box-shadow: var(--shadow-lg); }
+    .app[data-collapsed="false"] .backdrop { display: block; position: fixed; inset: 0; z-index: 35; background: rgba(0, 0, 0, .4); }
+    .only-mobile { display: inline-grid; }
+    .tabs { display: flex; gap: 4px; padding: 4px; margin: 8px 16px 0; border-radius: 10px; background: var(--hover); flex: none; }
+    .tabs button { flex: 1; height: 30px; border: 0; border-radius: 7px; background: none; font-weight: 500; color: var(--muted); }
+    .tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .1); }
+    .app[data-view="chat"] .preview { display: none; }
+    .app[data-view="preview"] .chat { display: none; }
+    .content { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    .content > .chat, .content > .preview { flex: 1; min-height: 0; }
+    .stage { padding: 16px; }
+    .pager .btn span { display: none; }
+    .hint { display: none; }
+    .actions .btn { padding: 0 10px; }
+  }
+  @media (min-width: 901px) { .content { display: contents; } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-deck" viewBox="0 0 24 24"><path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+</svg>
+
+<div class="app" id="app" data-collapsed="false" data-view="chat">
+
+  <!-- ============ left: collapsible chat sidebar ============ -->
+  <aside class="sidebar" id="sidebar" aria-label="Chats">
+    <div class="sb-head">
+      <button class="btn" id="newChat" title="New chat"><svg class="i"><use href="#i-plus"/></svg><span>New chat</span></button>
+      <button class="icon-btn" id="toggleSidebar" aria-label="Collapse sidebar" title="Collapse sidebar">
+        <svg class="i"><use href="#i-panel"/></svg>
+      </button>
+    </div>
+    <div class="sb-label">Recent</div>
+    <ul class="chats" id="chatList"></ul>
+    <div class="sb-spacer"></div>
+    <div class="sb-foot">
+      <span>3 chats · local</span>
+      <button class="icon-btn" id="theme" aria-label="Toggle theme" title="Toggle theme"><svg class="i"><use href="#i-moon"/></svg></button>
+    </div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+
+  <div class="content">
+    <div class="tabs" role="tablist" aria-label="View">
+      <button role="tab" id="tabChat" aria-selected="true">Chat</button>
+      <button role="tab" id="tabPreview" aria-selected="false">Preview</button>
+    </div>
+
+    <!-- ============ middle: chat history ============ -->
+    <main class="chat" aria-label="Conversation">
+      <header class="panel-head">
+        <button class="icon-btn only-mobile" id="openSidebar" aria-label="Open sidebar"><svg class="i"><use href="#i-panel"/></svg></button>
+        <div class="grow"><h1 id="chatTitle"></h1><span class="meta" id="chatMeta"></span></div>
+      </header>
+      <div class="messages" id="messages"><div class="thread" id="thread" aria-live="polite"></div></div>
+      <div class="composer-wrap">
+        <form class="composer" id="composer">
+          <textarea id="input" rows="2" placeholder="Describe the deck you want…" aria-label="Message"></textarea>
+          <div class="composer-foot">
+            <span class="hint">Enter to send · Shift+Enter for a new line</span>
+            <button class="send" id="send" type="submit" aria-label="Send" disabled><svg class="i"><use href="#i-send"/></svg></button>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <!-- ============ right: presentation previewer ============ -->
+    <section class="preview" aria-label="Slide preview">
+      <header class="panel-head">
+        <div class="grow"><h2 id="deckTitle"></h2><span class="badge" id="deckBadge" hidden></span></div>
+        <div class="actions">
+          <button class="btn" id="dlPptx"><svg class="i"><use href="#i-download"/></svg><span>PPTX</span></button>
+          <button class="btn" id="dlPdf"><svg class="i"><use href="#i-download"/></svg><span>PDF</span></button>
+        </div>
+      </header>
+      <div class="stage" id="stage"></div>
+      <nav class="pager" aria-label="Slide navigation">
+        <button class="btn" id="prev"><svg class="i"><use href="#i-left"/></svg><span>Previous</span></button>
+        <div class="dots" id="dots"></div>
+        <span class="count" id="count"></span>
+        <button class="btn" id="next"><span>Next</span><svg class="i"><use href="#i-right"/></svg></button>
+      </nav>
+    </section>
+  </div>
+</div>
+
+<div class="menu" id="menu" role="menu" hidden>
+  <button role="menuitem" data-act="rename"><svg class="i"><use href="#i-pencil"/></svg>Rename</button>
+  <hr>
+  <button role="menuitem" data-act="delete" class="danger"><svg class="i"><use href="#i-trash"/></svg>Delete</button>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ---------- sample data ---------- */
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const S = {
+  title: (t, s) => `<div class="s s-title"><div class="kick">Presentation</div><h1>${esc(t)}</h1><p>${esc(s)}</p></div>`,
+  bullets: (t, items) => `<div class="s s-body"><h2>${esc(t)}</h2><ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul></div>`,
+  table: (t, head, rows) => `<div class="s s-body"><h2>${esc(t)}</h2><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`,
+  code: (t, c) => `<div class="s s-body"><h2>${esc(t)}</h2><pre>${esc(c)}</pre></div>`,
+};
+const BUILD_PY = `from pptx import Presentation
+prs = Presentation()
+prs.slide_width, prs.slide_height = Inches(13.33), Inches(7.5)
+slide = prs.slides.add_slide(prs.slide_layouts[0])
+slide.shapes.title.text = "Redux vs Zustand"
+# … 4 more slides …
+prs.save("deck.pptx")`;
+
+const chats = [
+  { id: 1, title: "Redux vs Zustand", deckTitle: "Redux vs Zustand", version: 2,
+    slides: [
+      S.title("Redux vs Zustand", "Choosing a state manager for your React team"),
+      S.bullets("Agenda", ["The problem with prop drilling", "Redux Toolkit in 60 seconds", "Zustand in 60 seconds", "Trade-offs and a recommendation"]),
+      S.table("Side by side", ["", "Redux Toolkit", "Zustand"], [["Boilerplate", "Slices, actions, reducers", "One create() call"], ["Bundle size", "~11 kB", "~1 kB"], ["DevTools", "First-class", "Via middleware"], ["Best for", "Large teams", "Small to mid apps"]]),
+      S.code("A minimal Zustand store", "import { create } from 'zustand'\n\nconst useCounter = create((set) => ({\n  count: 0,\n  inc: () => set((s) => ({ count: s.count + 1 })),\n}))"),
+      S.bullets("Takeaways", ["Start with Zustand for most apps", "Pick Redux when you need strict patterns", "Both are fine. Consistency matters most"]),
+    ],
+    messages: [
+      { role: "user", text: "Make a 5-slide deck comparing Redux and Zustand for a React team." },
+      { role: "assistant", reasoning: "The audience is a React team choosing a state manager. I'll open with the problem, compare the two side by side, show a small Zustand example, and end with a recommendation.", code: BUILD_PY,
+        text: "Here's a 5-slide deck: title, agenda, a side-by-side comparison, a Zustand code example and the key takeaways.", deck: "Deck v1 · 5 slides" },
+      { role: "user", text: "Add a code example for Zustand on slide 4 and make the table shorter." },
+      { role: "assistant", text: "Updated. Slide 4 now shows a minimal Zustand store, and the table is trimmed to four rows.", deck: "Deck v2 · 5 slides" },
+    ] },
+  { id: 2, title: "Intro to vector databases", deckTitle: "Vector databases 101", version: 1,
+    slides: [
+      S.title("Vector databases 101", "Search by meaning, not keywords"),
+      S.bullets("Why they matter", ["Embeddings turn text into numbers", "Similar meaning means nearby vectors", "Powers RAG, search and recommendations"]),
+      S.bullets("What to evaluate", ["Recall and latency", "Filtering support", "Hosting and cost"]),
+    ],
+    messages: [
+      { role: "user", text: "A 3-slide intro to vector databases for engineers." },
+      { role: "assistant", reasoning: "Keep it short: definition, why it matters, and how to choose one.", text: "Done. A short 3-slide intro you can extend.", deck: "Deck v1 · 3 slides" },
+    ] },
+  { id: 3, title: "Q3 planning", deckTitle: "", version: 0, slides: [], messages: [] },
+];
+let activeId = 1, slideIdx = 0, nextId = 4, busy = false;
+const $ = (id) => document.getElementById(id);
+const active = () => chats.find((c) => c.id === activeId);
+
+/* ---------- sidebar ---------- */
+function renderSidebar() {
+  $("chatList").innerHTML = chats.map((c) => `
+    <li class="chat-item${c.id === activeId ? " active" : ""}" data-id="${c.id}">
+      <button class="chat-btn" data-act="select"><svg class="i"><use href="#i-chat"/></svg><span class="title">${esc(c.title)}</span></button>
+      <button class="icon-btn more" data-act="more" aria-label="Options for ${esc(c.title)}" aria-haspopup="menu"><svg class="i"><use href="#i-dots"/></svg></button>
+    </li>`).join("");
+}
+$("chatList").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-act]"); if (!btn) return;
+  const id = +btn.closest(".chat-item").dataset.id;
+  if (btn.dataset.act === "select") { selectChat(id); if (isMobile()) setCollapsed(true); }
+  if (btn.dataset.act === "more") { e.stopPropagation(); openMenu(btn, id); }
+});
+function selectChat(id) { activeId = id; slideIdx = 0; renderAll(); }
+
+/* three-dot menu */
+let menuFor = null;
+function openMenu(btn, id) {
+  closeMenu(); menuFor = id;
+  const m = $("menu"); m.hidden = false;
+  const r = btn.getBoundingClientRect();
+  m.style.top = r.bottom + 4 + "px";
+  m.style.left = Math.max(8, Math.min(r.right - m.offsetWidth, innerWidth - m.offsetWidth - 8)) + "px";
+  document.querySelector(`.chat-item[data-id="${id}"]`)?.classList.add("menu-open");
+  m.querySelector("button").focus();
+}
+function closeMenu() {
+  $("menu").hidden = true; menuFor = null;
+  document.querySelectorAll(".chat-item.menu-open").forEach((n) => n.classList.remove("menu-open"));
+}
+$("menu").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const id = menuFor; closeMenu();
+  if (b.dataset.act === "rename") startRename(id);
+  if (b.dataset.act === "delete") deleteChat(id);
+});
+document.addEventListener("click", (e) => { if (!e.target.closest("#menu")) closeMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+addEventListener("resize", closeMenu);
+
+function startRename(id) {
+  const chat = chats.find((c) => c.id === id);
+  const span = document.querySelector(`.chat-item[data-id="${id}"] .title`);
+  const input = document.createElement("input");
+  input.className = "rename-input"; input.value = chat.title; input.setAttribute("aria-label", "Chat name");
+  span.replaceWith(input); input.focus(); input.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return; done = true;
+    if (save && input.value.trim()) chat.title = input.value.trim();
+    renderSidebar(); renderChatHeader();
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); });
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("click", (e) => e.stopPropagation());
+}
+function deleteChat(id) {
+  const i = chats.findIndex((c) => c.id === id); if (i < 0) return;
+  chats.splice(i, 1);
+  if (!chats.length) chats.push({ id: nextId++, title: "New chat", deckTitle: "", version: 0, slides: [], messages: [] });
+  if (activeId === id) activeId = chats[Math.min(i, chats.length - 1)].id;
+  slideIdx = 0; renderAll(); toast("Chat deleted");
+}
+$("newChat").addEventListener("click", () => {
+  const c = { id: nextId++, title: "New chat", deckTitle: "", version: 0, slides: [], messages: [] };
+  chats.unshift(c); activeId = c.id; slideIdx = 0; renderAll();
+  if (isMobile()) setCollapsed(true);
+  $("input").focus();
+});
+
+/* collapse / mobile */
+const isMobile = () => matchMedia("(max-width: 900px)").matches;
+function setCollapsed(v) {
+  $("app").dataset.collapsed = v;
+  const b = $("toggleSidebar");
+  b.setAttribute("aria-label", v ? "Expand sidebar" : "Collapse sidebar");
+  b.title = v ? "Expand sidebar" : "Collapse sidebar";
+}
+$("toggleSidebar").addEventListener("click", () => setCollapsed($("app").dataset.collapsed !== "true"));
+$("openSidebar").addEventListener("click", () => setCollapsed(false));
+$("backdrop").addEventListener("click", () => setCollapsed(true));
+matchMedia("(max-width: 900px)").addEventListener("change", (e) => setCollapsed(e.matches));
+$("tabChat").addEventListener("click", () => setView("chat"));
+$("tabPreview").addEventListener("click", () => setView("preview"));
+function setView(v) {
+  $("app").dataset.view = v;
+  $("tabChat").setAttribute("aria-selected", v === "chat");
+  $("tabPreview").setAttribute("aria-selected", v === "preview");
+}
+
+/* theme */
+$("theme").addEventListener("click", () => {
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  $("theme").innerHTML = `<svg class="i"><use href="#i-${next === "dark" ? "sun" : "moon"}"/></svg>`;
+});
+
+/* ---------- chat panel ---------- */
+function renderChatHeader() {
+  const c = active();
+  $("chatTitle").textContent = c.title;
+  $("chatMeta").textContent = c.slides.length ? `${c.slides.length} slides · v${c.version}` : "";
+}
+function msgHTML(m) {
+  if (m.role === "user") return `<div class="msg user"><div class="bubble">${esc(m.text)}</div></div>`;
+  const av = `<div class="avatar"><svg class="i"><use href="#i-deck"/></svg></div>`;
+  if (m.pending) return `<div class="msg">${av}<div class="body"><div class="status"><span class="spinner"></span><span>${esc(m.step)}</span></div></div></div>`;
+  const fold = (label, inner) => `<details class="fold"><summary><svg class="i chev"><use href="#i-down"/></svg>${label}</summary>${inner}</details>`;
+  return `<div class="msg">${av}<div class="body">
+    ${m.reasoning ? fold("Reasoning", `<div class="fold-body"><p>${esc(m.reasoning)}</p></div>`) : ""}
+    ${m.code ? fold("Code", `<pre class="code">${esc(m.code)}</pre>`) : ""}
+    <p>${esc(m.text)}</p>
+    ${m.deck ? `<button class="deck-chip" data-act="open-deck"><span class="thumb"><svg class="i"><use href="#i-deck"/></svg></span><span class="grow"><b>${esc(m.deck.split(" · ")[0])}</b><small>${esc(m.deck.split(" · ")[1])}</small></span><svg class="i"><use href="#i-right"/></svg></button>` : ""}
+  </div></div>`;
+}
+function renderMessages() {
+  const c = active();
+  $("thread").innerHTML = c.messages.length ? c.messages.map(msgHTML).join("") : `
+    <div class="empty">
+      <div class="logo"><svg class="i"><use href="#i-deck"/></svg></div>
+      <h2>What should we present?</h2>
+      <p>Describe a deck and I'll write it, build it, and show it on the right.</p>
+      <div class="chips">
+        <button class="chip" data-prompt="A 6-slide intro to vector databases for engineers">Intro to vector databases</button>
+        <button class="chip" data-prompt="A quarterly business review for the sales team">Quarterly business review</button>
+        <button class="chip" data-prompt="A product launch plan with timeline and risks">Product launch plan</button>
+      </div>
+    </div>`;
+  const box = $("messages"); box.scrollTop = box.scrollHeight;
+}
+$("thread").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-prompt]");
+  if (chip) { $("input").value = chip.dataset.prompt; syncInput(); $("input").focus(); }
+  if (e.target.closest('[data-act="open-deck"]')) { slideIdx = 0; renderPreview(); if (isMobile()) setView("preview"); }
+});
+
+/* composer */
+function syncInput() {
+  const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 200) + "px";
+  $("send").disabled = busy || !t.value.trim();
+}
+$("input").addEventListener("input", syncInput);
+$("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); } });
+$("composer").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("input").value.trim(); if (!text || busy) return;
+  $("input").value = ""; syncInput(); simulate(text);
+});
+function simulate(text) {
+  const c = active(); busy = true; syncInput();
+  if (c.title === "New chat") { c.title = text.length > 40 ? text.slice(0, 40) + "…" : text; renderSidebar(); renderChatHeader(); }
+  c.messages.push({ role: "user", text });
+  const pending = { role: "assistant", pending: true, step: "Thinking…" };
+  c.messages.push(pending); renderMessages();
+  ["Writing the python-pptx program…", "Running the build…", "Rendering slides…"].forEach((s, i) => {
+    setTimeout(() => { pending.step = s; if (c.id === activeId) renderMessages(); }, 700 * (i + 1));
+  });
+  setTimeout(() => {
+    c.messages.splice(c.messages.indexOf(pending), 1);
+    c.version += 1;
+    if (!c.slides.length) {
+      c.deckTitle = c.title;
+      c.slides = [S.title(c.title, "Generated draft"), S.bullets("Overview", ["Context and goals", "Key points", "Next steps"]), S.bullets("Next steps", ["Review the draft", "Ask for changes in chat", "Download as PPTX or PDF"])];
+    }
+    c.messages.push({ role: "assistant", text: "Done. I've built the deck and it's ready in the preview. Ask for changes any time.", deck: `Deck v${c.version} · ${c.slides.length} slides` });
+    busy = false; slideIdx = 0; renderAll(); syncInput();
+  }, 700 * 4);
+}
+
+/* ---------- preview panel ---------- */
+function renderPreview() {
+  const c = active(), n = c.slides.length;
+  $("deckTitle").textContent = c.deckTitle || "Preview";
+  const badge = $("deckBadge"); badge.hidden = !n; badge.textContent = `v${c.version}`;
+  ["dlPptx", "dlPdf"].forEach((id) => ($(id).disabled = !n));
+  $("stage").innerHTML = n
+    ? `<div class="slide" id="slide" role="img" aria-label="Slide ${slideIdx + 1} of ${n}">${c.slides[slideIdx]}</div>`
+    : `<div class="empty-preview"><div class="ph"><svg class="i"><use href="#i-deck"/></svg></div><h3>No slides yet</h3><p>Your deck will appear here once it's built.</p></div>`;
+  $("dots").innerHTML = c.slides.map((_, i) => `<button class="dot" aria-label="Go to slide ${i + 1}" data-i="${i}" ${i === slideIdx ? 'aria-current="true"' : ""}></button>`).join("");
+  $("count").textContent = n ? `${slideIdx + 1} / ${n}` : "";
+  $("prev").disabled = !n || slideIdx === 0;
+  $("next").disabled = !n || slideIdx === n - 1;
+}
+const go = (d) => { const n = active().slides.length; const j = Math.max(0, Math.min(n - 1, slideIdx + d)); if (j !== slideIdx) { slideIdx = j; renderPreview(); } };
+$("prev").addEventListener("click", () => go(-1));
+$("next").addEventListener("click", () => go(1));
+$("dots").addEventListener("click", (e) => { const d = e.target.closest("[data-i]"); if (d) { slideIdx = +d.dataset.i; renderPreview(); } });
+document.addEventListener("keydown", (e) => {
+  if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if (e.key === "ArrowLeft") go(-1); if (e.key === "ArrowRight") go(1);
+});
+const slug = () => (active().deckTitle || "deck").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+$("dlPptx").addEventListener("click", () => toast(`Downloading ${slug()}-v${active().version}.pptx`));
+$("dlPdf").addEventListener("click", () => toast(`Downloading ${slug()}-v${active().version}.pdf`));
+
+let toastTimer;
+function toast(msg) {
+  const t = $("toast"); t.innerHTML = `<svg class="i"><use href="#i-check"/></svg>${esc(msg)}`;
+  t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+function renderAll() {
+  renderSidebar(); renderChatHeader(); renderMessages(); renderPreview();
+  $("input").placeholder = active().slides.length ? "Ask for changes to the deck…" : "Describe the deck you want…";
+}
+setCollapsed(isMobile());
+renderAll();
+</script>
+</body>
+</html>

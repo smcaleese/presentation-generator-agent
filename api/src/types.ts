@@ -9,6 +9,7 @@ export interface ChatMessage {
   content: string;
   reasoning?: string; // assistant only — the model's thinking trace
   code?: string; // assistant only — the python-pptx it wrote
+  deck?: { version: number; slideCount: number }; // assistant only — the deck version this turn built
   createdAt: string;
 }
 
@@ -39,7 +40,7 @@ export interface ChatDto {
   id: string;
   title: string;
   messages: ChatMessage[];
-  latestDeck?: DeckVersionDto;
+  decks: DeckVersionDto[]; // every ready version, oldest first
 }
 
 // ---- Server-Sent Events streamed from POST /api/chats/:id/messages ----
@@ -52,7 +53,7 @@ export type ServerEvent =
   | { type: "chat:title"; title: string } // chat was auto-named from its first message
   | { type: "error"; error: string }
   | { type: "done" }
-  // --- deck build (Daytona path) ---
+  // --- deck build ---
   | { type: "build:start"; version: number }
   | { type: "build:progress"; step: string }
   | { type: "build:done"; deck: DeckVersionDto }

@@ -18,6 +18,15 @@ export async function getChat(id: string): Promise<ChatDto> {
   return res.json();
 }
 
+export async function renameChat(id: string, title: string): Promise<void> {
+  const res = await fetch(`/api/chats/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error("failed to rename chat");
+}
+
 export async function deleteChat(id: string): Promise<void> {
   const res = await fetch(`/api/chats/${id}`, { method: "DELETE" });
   if (!res.ok && res.status !== 204) throw new Error("failed to delete chat");

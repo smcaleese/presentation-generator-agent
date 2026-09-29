@@ -83,12 +83,14 @@ export async function runTurn(
 
   let reasoningAll = "";
   let lastCode = "";
+  let lastDeck: DeckVersionDto | undefined;
   let lastReasoningItems: OutputItem[] = [];
 
   const persist = async (content: string) => {
     const meta: Record<string, unknown> = {};
     if (reasoningAll) meta.reasoning = reasoningAll;
     if (lastCode) meta.buildCode = lastCode;
+    if (lastDeck) meta.deck = { version: lastDeck.version, slideCount: lastDeck.slides.length };
     const reItems = lastReasoningItems.filter(isReasoning);
     if (reItems.length) meta.reasoningItems = reItems;
 
@@ -109,6 +111,7 @@ export async function runTurn(
         content,
         reasoning: reasoningAll || undefined,
         code: lastCode || undefined,
+        deck: lastDeck ? { version: lastDeck.version, slideCount: lastDeck.slides.length } : undefined,
         createdAt: row.createdAt.toISOString(),
       },
     });
@@ -140,7 +143,9 @@ export async function runTurn(
         if (code) {
           lastCode = code;
           emit({ type: "code", text: code, replace: true }); // snap panel to clean code
-          toolResult = (await runBuild(chat.id, messageId, code, emit)).toolResult;
+          const outcome = await runBuild(chat.id, messageId, code, emit);
+          if (outcome.ok && outcome.deck) lastDeck = outcome.deck;
+          toolResult = outcome.toolResult;
         } else {
           toolResult = "Error: createSlides needs a non-empty `code` argument (valid JSON).";
         }
