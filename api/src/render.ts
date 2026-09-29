@@ -21,7 +21,7 @@ export interface RenderResult {
 }
 
 /**
- * Convert a .pptx (produced in the sandbox) to a PDF and one PNG per slide.
+ * Convert a .pptx (produced by the runner) to a PDF and one PNG per slide.
  * Runs on the API host — the image ships LibreOffice + poppler-utils.
  */
 export async function pptxToSlides(pptx: Buffer): Promise<RenderResult> {

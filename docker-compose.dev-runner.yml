@@ -1,0 +1,8 @@
+# Dev-only: publish the runner on localhost:8000 so the api can run on the host
+# (`pnpm run dev`). Publishing needs a non-internal network, so this weakens the
+# runner's network isolation — don't use it outside local development.
+services:
+  runner:
+    networks: [default, runner-net]
+    ports:
+      - "127.0.0.1:8000:8000"

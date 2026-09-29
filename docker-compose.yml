@@ -16,15 +16,44 @@ services:
       timeout: 5s
       retries: 10
 
+  # Executes the model-written python-pptx programs. Holds no secrets and sits on an
+  # internal-only network: no route to the db or the internet.
+  runner:
+    build: ./runner
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    pids_limit: 256
+    environment:
+      MAX_CONCURRENT: "3"
+      BUILD_TIMEOUT_S: "60"
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-dev-runner-token}
+    networks: [runner-net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build: ./api
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      runner:
+        condition: service_healthy
+    networks: [default, runner-net]
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/presentations?schema=public
-      DAYTONA_API_KEY: ${DAYTONA_API_KEY}
+      RUNNER_URL: http://runner:8000
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-dev-runner-token}
+      MAX_CONCURRENT_BUILDS: "3"
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
@@ -46,6 +75,10 @@ services:
       VITE_API_URL: http://api:3001
     ports:
       - "5173:5173"
+
+networks:
+  runner-net:
+    internal: true # runner has no route to the internet or the db
 
 volumes:
   db_data:

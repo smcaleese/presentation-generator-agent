@@ -1,7 +1,9 @@
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "./db.js";
-import { deleteSandbox } from "./daytona.js";
+import { env } from "./env.js";
 import { runTurn, toDeckDto } from "./pipeline.js";
 import type { ChatDto, ChatSummary, ServerEvent } from "./types.js";
 
@@ -78,9 +80,12 @@ export async function registerRoutes(app: FastifyInstance) {
 
   app.delete("/api/chats/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const chat = await prisma.chat.findUnique({ where: { id }, select: { sandboxId: true } });
-    if (chat?.sandboxId) await deleteSandbox(chat.sandboxId).catch(() => {});
-    await prisma.chat.delete({ where: { id } }).catch(() => {});
+    // only touch disk for a chat that really exists — `id` comes from the URL
+    const chat = await prisma.chat.findUnique({ where: { id }, select: { id: true } });
+    if (chat) {
+      await prisma.chat.delete({ where: { id: chat.id } }).catch(() => {});
+      await rm(join(env.storageDir, chat.id), { recursive: true, force: true });
+    }
     return reply.code(204).send();
   });
 
@@ -127,7 +132,7 @@ export async function registerRoutes(app: FastifyInstance) {
     }
 
     try {
-      await runTurn(id, content, emit);
+      await runTurn(id, userMsg.id, content, emit);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       emit({ type: "error", error: message });

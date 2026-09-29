@@ -10,20 +10,19 @@
     "prisma:generate": "dotenv -e ../.env -- prisma generate",
     "prisma:migrate": "dotenv -e ../.env -- prisma migrate dev",
     "prisma:studio": "dotenv -e ../.env -- prisma studio",
-    "prisma:deploy": "prisma migrate deploy",
-    "sandboxes:list": "dotenv -e ../.env -- tsx scripts/prune-sandboxes.ts",
-    "sandboxes:prune": "dotenv -e ../.env -- tsx scripts/prune-sandboxes.ts --delete"
+    "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-    "@daytona/sdk": "^0.207.0",
     "@fastify/cors": "^11.3.0",
     "@prisma/client": "^6.19.3",
     "dotenv": "^17.4.2",
     "fastify": "^5.12.1",
     "openai": "^7.8.0",
+    "p-limit": "^7.3.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/node": "^22.20.4",
     "dotenv-cli": "^11.0.0",
     "prisma": "^6.19.3",
     "tsx": "^4.19.2",

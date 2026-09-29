@@ -2,9 +2,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { prisma } from "./db.js";
 import { env } from "./env.js";
-import { runBuildInSandbox } from "./daytona.js";
 import { type InputItem, type OutputItem, streamAgentStep } from "./llm.js";
 import { pptxToSlides } from "./render.js";
+import { isBusy, postBuild } from "./runner.js";
 import type { DeckVersionDto, ServerEvent } from "./types.js";
 
 type Emit = (e: ServerEvent) => void;
@@ -12,6 +12,16 @@ type Emit = (e: ServerEvent) => void;
 const MAX_STEPS = 5; // model turns per user message (tool call + reaction + safety)
 
 const isReasoning = (it: OutputItem): boolean => it.type === "reasoning";
+
+/** The `code` argument of a createSlides call, or undefined if it's missing/blank/not valid JSON. */
+function parseCode(args: string): string | undefined {
+  try {
+    const { code } = JSON.parse(args) as { code?: unknown };
+    return typeof code === "string" && code.trim() ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 interface BuildOutcome {
   ok: boolean;
@@ -21,13 +31,18 @@ interface BuildOutcome {
 
 /**
  * Agentic turn on the Responses API. The model may call `createSlides` (→ run the
- * code in a Daytona sandbox, render it, feed the result / error back) or just
+ * code in the runner service, render it, feed the result / error back) or just
  * reply in prose. Loops until it answers without a tool call.
  *
  * Emits `reasoning` / `token` (prose) / `code` while the model streams,
  * `build:*` around each tool call, and a final `message`. Never throws.
  */
-export async function runTurn(chatId: string, userPrompt: string, emit: Emit): Promise<void> {
+export async function runTurn(
+  chatId: string,
+  messageId: string, // the user message this turn answers — names the runner's build directory
+  userPrompt: string,
+  emit: Emit,
+): Promise<void> {
   const chat = await prisma.chat.findUniqueOrThrow({ where: { id: chatId } });
 
   const history = await prisma.message.findMany({
@@ -119,23 +134,17 @@ export async function runTurn(chatId: string, userPrompt: string, emit: Emit): P
     input.push(...(outputItems as InputItem[]));
     for (const call of functionCalls) {
       let toolResult: string;
-      if (call.name !== "createSlides") {
-        toolResult = `Error: unknown tool "${call.name}".`;
-      } else {
-        let code: string | undefined;
-        try {
-          const parsed = JSON.parse(call.arguments) as { code?: unknown };
-          if (typeof parsed.code === "string" && parsed.code.trim()) code = parsed.code;
-        } catch {
-          /* fall through */
-        }
-        if (!code) {
-          toolResult = "Error: createSlides needs a non-empty `code` argument (valid JSON).";
-        } else {
+      if (call.name === "createSlides") {
+        const code = parseCode(call.arguments);
+        if (code) {
           lastCode = code;
           emit({ type: "code", text: code, replace: true }); // snap panel to clean code
-          toolResult = (await runBuild(chat.id, code, emit)).toolResult;
+          toolResult = (await runBuild(chat.id, messageId, code, emit)).toolResult;
+        } else {
+          toolResult = "Error: createSlides needs a non-empty `code` argument (valid JSON).";
         }
+      } else {
+        toolResult = `Error: unknown tool "${call.name}".`;
       }
       input.push({ type: "function_call_output", call_id: call.call_id, output: toolResult });
     }
@@ -144,9 +153,13 @@ export async function runTurn(chatId: string, userPrompt: string, emit: Emit): P
   await persist("I couldn't get the deck to build after several attempts — see the errors above.");
 }
 
-/** Run one createSlides call: sandbox → render → persist a DeckVersion. */
-async function runBuild(chatId: string, code: string, emit: Emit): Promise<BuildOutcome> {
-  const chat = await prisma.chat.findUniqueOrThrow({ where: { id: chatId } });
+/** Run one createSlides call: runner → render → persist a DeckVersion. */
+async function runBuild(
+  chatId: string,
+  messageId: string,
+  code: string,
+  emit: Emit,
+): Promise<BuildOutcome> {
   const prior = await prisma.deckVersion.findFirst({
     where: { chatId },
     orderBy: { version: "desc" },
@@ -159,11 +172,8 @@ async function runBuild(chatId: string, code: string, emit: Emit): Promise<Build
   });
 
   try {
-    emit({ type: "build:progress", step: "running in sandbox" });
-    const { pptxBytes, sandboxId } = await runBuildInSandbox(code, chat.sandboxId ?? undefined);
-    if (sandboxId !== chat.sandboxId) {
-      await prisma.chat.update({ where: { id: chatId }, data: { sandboxId } });
-    }
+    emit({ type: "build:progress", step: isBusy() ? "waiting for a free build slot" : "running build" });
+    const pptxBytes = await postBuild(chatId, messageId, code);
 
     emit({ type: "build:progress", step: "rendering slides" });
     const { pdfBytes, slidePngs } = await pptxToSlides(pptxBytes);

@@ -28,7 +28,9 @@ function reasoningEffort(raw: string | undefined): "low" | "high" | "max" | "off
 export const env = {
   port: Number(process.env.PORT ?? 3001),
   databaseUrl: required("DATABASE_URL"),
-  daytonaApiKey: process.env.DAYTONA_API_KEY ?? "",
+  runnerUrl: required("RUNNER_URL"),
+  runnerToken: process.env.RUNNER_TOKEN ?? "",
+  maxConcurrentBuilds: Number(process.env.MAX_CONCURRENT_BUILDS ?? 3),
   storageDir: process.env.STORAGE_DIR ?? "./storage",
   deepseek: {
     apiKey: process.env.DEEPSEEK_API_KEY ?? "",
