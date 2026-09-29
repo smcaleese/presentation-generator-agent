@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { prisma } from "./db.js";
 import { env } from "./env.js";
+import { deckFileUrl, slideImageUrl } from "./files.js";
 import { type InputItem, type OutputItem, streamAgentStep } from "./llm.js";
 import { pptxToSlides } from "./render.js";
 import { isBusy, postBuild } from "./runner.js";
@@ -218,11 +219,9 @@ async function runBuild(
   }
 }
 
-const fileUrl = (path: string, downloadAs?: string) =>
-  `/api/files/${encodeURIComponent(path)}${downloadAs ? `?download=${encodeURIComponent(downloadAs)}` : ""}`;
-
 export function toDeckDto(deck: {
   id: string;
+  chatId: string;
   version: number;
   status: string;
   error: string | null;
@@ -237,11 +236,11 @@ export function toDeckDto(deck: {
     status: deck.status as DeckVersionDto["status"],
     error: deck.error ?? undefined,
     reasoning: deck.reasoning ?? undefined,
-    pptxUrl: deck.pptxPath ? fileUrl(deck.pptxPath, `deck-v${deck.version}.pptx`) : undefined,
-    pdfUrl: deck.pdfPath ? fileUrl(deck.pdfPath, `deck-v${deck.version}.pdf`) : undefined,
+    pptxUrl: deck.pptxPath ? deckFileUrl(deck.chatId, deck.version, "deck.pptx") : undefined,
+    pdfUrl: deck.pdfPath ? deckFileUrl(deck.chatId, deck.version, "deck.pdf") : undefined,
     slides: deck.slides.map((s) => ({
       index: s.index,
-      imageUrl: fileUrl(s.imagePath),
+      imageUrl: slideImageUrl(deck.chatId, deck.version, s.index),
     })),
   };
 }
