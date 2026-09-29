@@ -1,4 +1,5 @@
-import { ChevronRight, Presentation } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import { HiOutlinePresentationChartBar } from "react-icons/hi";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -20,7 +21,7 @@ export function DeckChip({ version, slideCount, active, onClick }: Props) {
       )}
     >
       <span className="grid aspect-video w-11 shrink-0 place-items-center rounded-md bg-gradient-to-br from-indigo-900 to-indigo-600 text-white">
-        <Presentation className="size-3.5" />
+        <HiOutlinePresentationChartBar className="size-3.5" />
       </span>
       <span className="min-w-0 flex-1 text-sm">
         <b className="block font-semibold">Deck v{version}</b>

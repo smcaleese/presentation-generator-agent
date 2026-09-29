@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronRight, PanelLeft, Presentation } from "lucide-react";
+import { ChevronDown, ChevronRight, PanelLeft } from "lucide-react";
+import { HiOutlinePresentationChartBar } from "react-icons/hi";
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,7 +88,7 @@ export function ChatPane({
           {empty && (
             <div className="mx-auto mt-[8vh] max-w-lg text-center">
               <div className="mx-auto mb-4 grid size-11 place-items-center rounded-xl bg-primary text-primary-foreground">
-                <Presentation className="size-5" />
+                <HiOutlinePresentationChartBar className="size-5" />
               </div>
               <h2 className="mb-1.5 text-xl font-semibold tracking-tight">What should we present?</h2>
               <p className="mb-5 text-sm text-muted-foreground">
@@ -189,7 +190,7 @@ function AssistantRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex gap-3">
       <div className="mt-px grid size-7 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
-        <Presentation className="size-4" />
+        <HiOutlinePresentationChartBar className="size-4" />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">{children}</div>
     </div>

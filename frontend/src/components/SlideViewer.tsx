@@ -1,4 +1,5 @@
-import { ChevronLeft, ChevronRight, Download, Presentation } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { HiOutlinePresentationChartBar } from "react-icons/hi";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ export function SlideViewer({ deck, title, building }: Props) {
         ) : (
           <div className="text-center text-muted-foreground">
             <div className="mx-auto mb-4 grid aspect-video w-[min(70%,460px)] place-items-center rounded-2xl border-2 border-dashed">
-              <Presentation className="size-8 opacity-60" />
+              <HiOutlinePresentationChartBar className="size-8 opacity-60" />
             </div>
             <h3 className="mb-1 text-[15px] font-medium text-foreground">
               {building ? "Building your slides…" : "No slides yet"}
