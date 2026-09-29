@@ -4,7 +4,7 @@ You describe a deck in chat. An AI model writes a Python program, a separate **r
 runs it to produce a `.pptx`, the API turns that into slide images, and the browser shows them.
 This document walks through every step with the real code.
 
-For a one-page picture see [docs/BUILD_FLOW.md](docs/BUILD_FLOW.md). For setup see the [README](README.md).
+For a one-page picture see [docs/build-flow.md](build-flow.md). For setup see the [README](../README.md).
 
 ## Contents
 
@@ -47,7 +47,7 @@ API's secrets (DeepSeek key, database credentials).
 
 ### Step 1: the user sends a message
 
-`POST /api/chats/:id/messages` ([routes.ts](api/src/routes.ts)) opens a Server-Sent Events stream, saves the
+`POST /api/chats/:id/messages` ([routes.ts](../api/src/routes.ts)) opens a Server-Sent Events stream, saves the
 user's message, then hands over to `runTurn`. The **user message's ID** matters later: it names the
 runner's working directory.
 
@@ -72,7 +72,7 @@ build progress, slides) is an event sent through it.
 
 ### Step 2: the AI is offered one tool
 
-In [llm.ts](api/src/llm.ts) the model is told to call a `createSlides` tool with a **complete** Python
+In [llm.ts](../api/src/llm.ts) the model is told to call a `createSlides` tool with a **complete** Python
 program whenever the user wants slides, and to reply in plain text otherwise.
 
 ```ts
@@ -100,7 +100,7 @@ can be stateless.
 
 ### Step 3: the agent loop
 
-`runTurn` ([pipeline.ts](api/src/pipeline.ts)) loops up to `MAX_STEPS = 5` model calls. Each call streams
+`runTurn` ([pipeline.ts](../api/src/pipeline.ts)) loops up to `MAX_STEPS = 5` model calls. Each call streams
 reasoning, text and code to the browser as it arrives.
 
 ```ts
@@ -141,7 +141,7 @@ with a fix. That is the retry loop.
 
 ### Step 4: `runBuild` orchestrates one build
 
-`runBuild` in [pipeline.ts](api/src/pipeline.ts) does the whole build: record it, run it, render it,
+`runBuild` in [pipeline.ts](../api/src/pipeline.ts) does the whole build: record it, run it, render it,
 save it. (Not to be confused with `postBuild`, which is just the HTTP call.)
 
 ```ts
@@ -166,11 +166,11 @@ try {
 ```
 
 A `DeckVersion` row moves through `building` → `ready` or `error`. If the API is killed mid-build,
-a startup sweep in [index.ts](api/src/index.ts) marks leftover `building` rows as `error`.
+a startup sweep in [index.ts](../api/src/index.ts) marks leftover `building` rows as `error`.
 
 ### Step 5: `postBuild` sends the code to the runner
 
-[runner.ts](api/src/runner.ts) makes the HTTP request. It first waits for a free slot (a `p-limit`
+[runner.ts](../api/src/runner.ts) makes the HTTP request. It first waits for a free slot (a `p-limit`
 limiter, default 3 at a time), then POSTs the program.
 
 ```ts
@@ -208,7 +208,7 @@ The pptx comes back as **raw binary in the response body** (not JSON or base64),
 
 ### Step 6: the runner builds it
 
-[runner/app.py](runner/app.py) `POST /build` is where the AI's code actually runs.
+[runner/app.py](../runner/app.py) `POST /build` is where the AI's code actually runs.
 
 **a) Gatekeeping.** Bad token → 401. IDs that aren't `^[A-Za-z0-9_-]{1,64}$` → 400 (they become path
 segments, so `../` tricks are rejected). All slots in use → 429.
@@ -286,7 +286,7 @@ can be killed reliably, given its own environment, and bounded by per-build reso
 
 ### Step 7: the API renders the slides
 
-Back in the API, `pptxToSlides` ([render.ts](api/src/render.ts)) writes the bytes to a temporary directory
+Back in the API, `pptxToSlides` ([render.ts](../api/src/render.ts)) writes the bytes to a temporary directory
 and converts them: LibreOffice makes a PDF, poppler makes one PNG per slide.
 
 ```ts
@@ -324,7 +324,7 @@ emit({ type: "build:done", deck: toDeckDto(ready) });        // browser shows th
 ### Step 9: downloading
 
 The runner is not involved in downloads. The API serves files straight from its own storage volume.
-URLs carry ids, never filesystem paths ([files.ts](api/src/files.ts)):
+URLs carry ids, never filesystem paths ([files.ts](../api/src/files.ts)):
 
 ```
 /api/chats/<chatId>/decks/3/deck.pptx
@@ -369,7 +369,7 @@ reuse the same `<messageId>` directory.
 
 ## 4. Isolation and safety
 
-The AI's code is treated as untrusted. Defence in depth, from [docker-compose.yml](docker-compose.yml) and `runner/app.py`:
+The AI's code is treated as untrusted. Defence in depth, from [docker-compose.yml](../docker-compose.yml) and `runner/app.py`:
 
 ```yaml
 runner:

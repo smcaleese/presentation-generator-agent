@@ -2,7 +2,7 @@
 
 How one message travels from the input box to a rendered deck. This doc focuses
 on the **streaming mechanism**; the build/render internals are in
-[RUNNER_WORKFLOW.md](RUNNER_WORKFLOW.md). Snippets are trimmed — follow the file
+[presentation-workflow-explanation.md](presentation-workflow-explanation.md). Snippets are trimmed — follow the file
 links for full source.
 
 ```
@@ -202,7 +202,7 @@ app.post("/api/chats/:id/messages", async (req, reply) => {
 
 Builds the Responses `input[]`, then loops: stream a model step; if it calls
 `createSlides`, run the build and feed the result back; otherwise the prose is the
-final answer. Full internals in [RUNNER_WORKFLOW.md](RUNNER_WORKFLOW.md).
+final answer. Full internals in [presentation-workflow-explanation.md](presentation-workflow-explanation.md).
 
 ```ts
 export async function runTurn(chatId, userPrompt, emit): Promise<void> {
