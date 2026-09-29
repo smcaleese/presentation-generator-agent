@@ -38,7 +38,7 @@ poppler` (or set `SOFFICE_BIN`). The Daytona sandbox stays a generic Python imag
 | Tool | Version | Notes |
 |---|---|---|
 | Node.js | ≥ 22 | `node --version` |
-| npm | ≥ 10 | ships with Node |
+| pnpm | ≥ 10 | `corepack enable` (version pinned via `packageManager`) |
 | Docker + Compose | any recent | runs Postgres (and the whole stack if you want) |
 | LibreOffice + poppler | any recent | **only for non-Docker local dev** — `brew install libreoffice poppler`. Baked into `api/Dockerfile` otherwise. |
 
@@ -79,23 +79,23 @@ data in the `db_data` volume.
 
 ```bash
 cd api
-npm install
-npm run prisma:migrate -- --name init   # first run only — creates tables
-npm run dev
+pnpm install
+pnpm run prisma:migrate --name init   # first run only — creates tables
+pnpm run dev
 ```
 
 - http://localhost:3001, hot reload via `tsx watch`.
 - Verify: `curl localhost:3001/api/health` → `{"ok":true}`
 - The `.env` lives at the repo root; the Prisma CLI doesn't auto-load it, so use
-  the `prisma:*` npm scripts (they wrap the CLI with `dotenv -e ../.env`). Running
-  `npx prisma …` directly fails with `Environment variable not found: DATABASE_URL`.
+  the `prisma:*` pnpm scripts (they wrap the CLI with `dotenv -e ../.env`). Running
+  `pnpm exec prisma …` directly fails with `Environment variable not found: DATABASE_URL`.
 
 ### 4. Start the frontend
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 http://localhost:5173. Vite proxies `/api/*` to `http://localhost:3001`, so there's
@@ -141,13 +141,13 @@ docker compose up --build
 
 | Task | Command |
 |---|---|
-| API dev server | `cd api && npm run dev` |
-| Frontend dev server | `cd frontend && npm run dev` |
-| Apply a schema change | `cd api && npm run prisma:migrate -- --name <change>` |
-| Inspect the DB | `cd api && npm run prisma:studio` |
+| API dev server | `cd api && pnpm run dev` |
+| Frontend dev server | `cd frontend && pnpm run dev` |
+| Apply a schema change | `cd api && pnpm run prisma:migrate --name <change>` |
+| Inspect the DB | `cd api && pnpm run prisma:studio` |
 | Type-check API | `cd api && npx tsc --noEmit` |
-| Build frontend | `cd frontend && npm run build` |
-| Reset the local DB | `docker compose down -v && docker compose up -d db && cd api && npm run prisma:migrate` |
+| Build frontend | `cd frontend && pnpm run build` |
+| Reset the local DB | `docker compose down -v && docker compose up -d db && cd api && pnpm run prisma:migrate` |
 
 ---
 
@@ -156,7 +156,7 @@ docker compose up --build
 | Symptom | Fix |
 |---|---|
 | `Missing required env var: DATABASE_URL` | `.env` missing or not at repo root — `cp .env.example .env` |
-| `Environment variable not found: DATABASE_URL` from a `prisma` command | you ran `npx prisma …` directly — use the `prisma:*` npm scripts |
+| `Environment variable not found: DATABASE_URL` from a `prisma` command | you ran `pnpm exec prisma …` directly — use the `prisma:*` pnpm scripts |
 | `[tsx] Previous process hasn't exited yet` | stale dev server — `pkill -f "tsx watch"` |
 | API exits with a Postgres connection error | `docker compose up -d db` and wait a few seconds |
 | Chat replies with `Error: 401` | `DEEPSEEK_API_KEY` missing or invalid in the root `.env` |

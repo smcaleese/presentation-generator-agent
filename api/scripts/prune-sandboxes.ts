@@ -1,9 +1,9 @@
 /**
  * List Daytona sandboxes on the account, and (with --delete) remove them.
  *
- *   npm run sandboxes:list            # read-only
- *   npm run sandboxes:prune           # delete stopped sandboxes
- *   npm run sandboxes:prune -- --all  # delete every sandbox (running too)
+ *   pnpm run sandboxes:list            # read-only
+ *   pnpm run sandboxes:prune           # delete stopped sandboxes
+ *   pnpm run sandboxes:prune --all  # delete every sandbox (running too)
  *
  * Sandboxes are recreated on demand by getOrCreateSandbox, so pruning is safe —
  * a chat mid-edit just loses its warm sandbox and rebuilds from scratch.

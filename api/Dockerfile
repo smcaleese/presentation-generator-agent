@@ -10,11 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json* ./
-RUN npm install
+# pnpm version comes from package.json "packageManager"
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN npx prisma generate && npm run build
+RUN pnpm exec prisma generate && pnpm run build
 
 EXPOSE 3001
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && node dist/index.js"]
