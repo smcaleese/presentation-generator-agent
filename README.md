@@ -34,8 +34,7 @@ DEEPSEEK_API_KEY=sk-...
 ```
 
 Everything else has a working default. Optional settings: `DEEPSEEK_MODEL`, `REASONING_EFFORT`
-(`low` / `medium` / `high` / `max` / `off`), `STORAGE_DIR`, and `RUNNER_TOKEN` (shared secret between
-the API and the runner).
+(`low` / `medium` / `high` / `max` / `off`), and `RUNNER_TOKEN` (shared secret between the API and the runner).
 
 ### 2. Start everything
 
@@ -46,18 +45,10 @@ docker compose up --build
 Open **http://localhost:5173**. This starts the frontend, the API (port 3001), the runner, and Postgres.
 `docker compose down` stops it, and `docker compose down -v` also wipes the database.
 
-### Running the frontend and API on your machine instead (for development)
-
-You also need Node.js 22+, pnpm 10+ (`corepack enable`), and `brew install libreoffice poppler`.
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev-runner.yml up -d db runner
-cd api && pnpm install && pnpm run prisma:migrate && pnpm run dev     # http://localhost:3001
-cd frontend && pnpm install && pnpm run dev                           # http://localhost:5173
-```
-
-The API reads `.env` from the repo root. Use the `pnpm run prisma:*` scripts rather than calling `prisma`
-directly, since they load that file.
+**Live reload.** The source folders are mounted into the containers, so edits show up as you save: the frontend
+hot-reloads (Vite), and the API and runner restart automatically. You only need to run
+`docker compose up --build` again after changing dependencies (`package.json`, the lockfile, `requirements.txt`),
+the Prisma schema, or a Dockerfile.
 
 ## Tech stack
 

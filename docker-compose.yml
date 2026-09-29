@@ -34,6 +34,10 @@ services:
       BUILD_TIMEOUT_S: "60"
       RUNNER_TOKEN: ${RUNNER_TOKEN:-dev-runner-token}
     networks: [runner-net]
+    # live reload: the runner source is mounted read-only and uvicorn restarts on change
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/src"]
+    volumes:
+      - ./runner:/src:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -60,10 +64,13 @@ services:
       REASONING_EFFORT: ${REASONING_EFFORT:-medium}
       PORT: 3001
       STORAGE_DIR: /app/storage
+    # live reload: api/src is mounted and `tsx watch` restarts the server whenever it changes
+    command: sh -c "pnpm exec prisma migrate deploy && pnpm exec tsx watch src/index.ts"
     ports:
       - "3001:3001"
     volumes:
       - storage:/app/storage
+      - ./api/src:/app/src
 
   frontend:
     build: ./frontend
@@ -75,6 +82,8 @@ services:
       VITE_API_URL: http://api:3001
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src # live reload: Vite hot-reloads on save
 
 networks:
   runner-net:
