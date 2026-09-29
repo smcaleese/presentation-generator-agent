@@ -1,8 +1,8 @@
 # presentation-generator-agent
 
 Describe a presentation in chat. The model decides whether to call a
-**`createSlides` tool** — if it does, its `python-pptx` code runs in a **Daytona
-sandbox** to produce a `.pptx`, the API renders that to per-slide PNGs shown in a
+**`createSlides` tool** — if it does, its `python-pptx` code runs in the
+**runner service** (an isolated container) to produce a `.pptx`, the API renders that to per-slide PNGs shown in a
 live preview, and the tool's result (slide count, or the Python error) goes back
 to the model so it can fix mistakes and try again. Plain questions / greetings
 get a normal reply with no build. Each successful build is a new version.
@@ -10,14 +10,16 @@ get a normal reply with no build. Each successful build is a new version.
 The reasoning and the tool's code stream into the chat as collapsible panels.
 Background: [docs/IDEA.md](docs/IDEA.md), [docs/PLAN.md](docs/PLAN.md). Flow
 walkthroughs: [docs/REVIEW.md](docs/REVIEW.md) (message → SSE),
-[docs/DAYTONA_WORKFLOW.md](docs/DAYTONA_WORKFLOW.md) (tool → sandbox → render).
+[docs/RUNNER_WORKFLOW.md](docs/RUNNER_WORKFLOW.md) (tool → runner → render).
 
 ## Layout
 
 ```
-frontend/   React 19 + Vite 6 + TS + Tailwind 4 + shadcn/ui  — sidebar + chat + slide preview
+frontend/   React 19 + Vite 6 + TS + Tailwind 4 + shadcn/ui  — collapsible sidebar (rename/delete) + chat + slide preview; light/dark
+                                                               (visual reference: docs/design-mockup.html)
 api/        Fastify 5 + Prisma 6 + TS                          — chats API, LLM streaming (SSE), deck build + render
-docker-compose.yml                                             — postgres + api + frontend
+runner/     FastAPI + python-pptx                              — isolated service that runs the model's build programs
+docker-compose.yml                                             — postgres + api + runner + frontend
 .env                                                           — single env file, read by the api
 ```
 
@@ -26,8 +28,10 @@ contract — keep them in sync.
 
 The **API host renders `.pptx → .pdf → .png`** with LibreOffice + poppler (baked
 into `api/Dockerfile`). For local dev outside Docker: `brew install libreoffice
-poppler` (or set `SOFFICE_BIN`). The Daytona sandbox stays a generic Python image
-— `python-pptx` is installed into it at runtime.
+poppler` (or set `SOFFICE_BIN`). The model's code runs in the **`runner`** container
+(`python-pptx` pre-installed, no secrets, internal-only network). To run the API on the host,
+start just the runner with `docker compose -f docker-compose.yml -f docker-compose.dev-runner.yml up -d runner`
+and set `RUNNER_URL=http://localhost:8000` in `.env` (see `.env.example`).
 
 ---
 
@@ -55,7 +59,8 @@ Then set the required values:
 | Variable | Required for | Default |
 |---|---|---|
 | `DEEPSEEK_API_KEY` | writing the `python-pptx` code | *(blank — add yours)* |
-| `DAYTONA_API_KEY` | running that code in a sandbox | *(blank — add yours)* |
+| `RUNNER_URL` | where the api reaches the runner (compose sets it to `http://runner:8000`) | `http://localhost:8000` for host dev |
+| `RUNNER_TOKEN` | shared secret between api and runner | `dev-runner-token` |
 | `STORAGE_DIR` | where generated `.pptx` / `.pdf` / slide PNGs are written | `./storage` |
 | `DEEPSEEK_BASE_URL` | — | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | — | `deepseek-v4-flash` (a reasoning model; its thinking trace streams to the chat pane) |
@@ -106,18 +111,19 @@ no CORS setup in dev.
 A chat is created automatically (**New chat**, top-left, makes more). Describe a
 deck — *"A 6-slide intro to vector databases for engineers."* — and the model
 calls `createSlides`: **Reasoning** and **Code** panels stream in, the status line
-shows `running in sandbox → rendering slides`, then the slides appear in the
+shows `running build → rendering slides`, then the slides appear in the
 preview and the model writes a short summary. Refine with follow-ups
-(*"make slide 3 a bar chart"*) — each is a new version in the same warm sandbox.
+(*"make slide 3 a bar chart"*) — each is a new version (the model re-sends the full updated program).
 Say *"hi"* and it just replies — no build.
 
-First build in a chat is slower (sandbox cold start, ~5–15 s); later edits reuse
-the sandbox (~2–5 s + render). If the model's code errors, the error is fed back
+Builds take a couple of seconds plus render time (no sandbox cold start). If the model's code errors, the error is fed back
 and it retries automatically.
 
-The three panes each scroll independently and their borders are draggable (sizes
-persist per browser). When a deck is ready, the preview footer has **PPTX** and
-**PDF** download buttons.
+The sidebar collapses to an icon rail (each chat has a **⋯** menu with Rename / Delete), and the
+chat and preview panes scroll independently with a draggable divider (sizes and the sidebar state
+persist per browser). Each reply that built a deck shows a **Deck vN** box — click one to view that
+version. The preview header has the **PPTX** and **PDF** download buttons; the footer has
+Previous / Next (or use ← →). A light/dark toggle is at the bottom of the sidebar.
 
 ---
 
@@ -161,7 +167,7 @@ docker compose up --build
 | API exits with a Postgres connection error | `docker compose up -d db` and wait a few seconds |
 | Chat replies with `Error: 401` | `DEEPSEEK_API_KEY` missing or invalid in the root `.env` |
 | `Build failed: … spawn soffice ENOENT` | LibreOffice not on PATH — `brew install libreoffice poppler`, or run via Docker, or set `SOFFICE_BIN` |
-| `Build failed: could not install python-pptx in sandbox` | check `DAYTONA_API_KEY`; the sandbox needs outbound network for `pip` |
+| `Build failed: runner unreachable` | the `runner` container isn't up — `docker compose up -d runner`; for host dev see the runner note above |
 | Port 3001 / 5173 / 5432 already in use | stop the other process, or change `PORT` / the compose port mappings |
 
 ---
@@ -172,14 +178,14 @@ docker compose up --build
 |---|---|
 | Agent loop (`runTurn`) — `createSlides` tool, `tool_choice: "auto"`, retry-on-error | ✅ |
 | DeepSeek **Responses API** — streaming, thinking, tools; `reasoning` items replayed (stateless + tools) | ✅ |
-| `runBuildInSandbox` — generic Daytona sandbox, runtime `pip install python-pptx`, run, download `.pptx` | ✅ |
+| `postBuild` (`api/src/runner.ts`) — POST the program to the stateless `runner` service, get the `.pptx` back; `p-limit` caps concurrent builds | ✅ |
 | `pptxToSlides` — `soffice` → PDF, `pdftoppm` → per-slide PNG (on the API host) | ✅ |
-| `DeckVersion` / `Slide` + `/api/files/*`; sandbox reuse via `Chat.sandboxId`; `DELETE` frees the sandbox | ✅ |
+| `DeckVersion` / `Slide` + `/api/chats/:id/decks/:version/…` file routes; stateless builds (no per-chat sandbox state) | ✅ |
 | `SlideViewer` carousel; Reasoning + Code panels + prose bubble in `App.tsx` | ✅ |
-| Custom Daytona snapshot (skip runtime `pip install`) | ⬜ optional speed-up |
+| Move LibreOffice/poppler into the runner; per-build isolation (bubblewrap/nsjail) before untrusted public use | ⬜ optional |
 | Persisting per-step tool messages (currently one collapsed assistant `Message` per turn) | ⬜ |
 
-See [docs/DAYTONA_WORKFLOW.md](docs/DAYTONA_WORKFLOW.md) for the full flow.
+See [docs/RUNNER_WORKFLOW.md](docs/RUNNER_WORKFLOW.md) for the full flow.
 
 ---
 
@@ -188,8 +194,9 @@ See [docs/DAYTONA_WORKFLOW.md](docs/DAYTONA_WORKFLOW.md) for the full flow.
 | File | What |
 |---|---|
 | [docs/REVIEW.md](docs/REVIEW.md) | message-send flow, frontend → backend, with code |
-| [docs/DAYTONA_WORKFLOW.md](docs/DAYTONA_WORKFLOW.md) | how the deck build + render works (current design) |
+| [docs/RUNNER_WORKFLOW.md](docs/RUNNER_WORKFLOW.md) | how the deck build + render works (current design) |
+| [docs/BUILD_FLOW.md](docs/BUILD_FLOW.md) | Mermaid flowchart: AI writes code → runner builds it → slides render |
 | [docs/example-build.py](docs/example-build.py) | a representative `python-pptx` program the model produces |
-| [docs/DAYTONA_PLAN.md](docs/DAYTONA_PLAN.md) | the phased plan it was built from (implemented) |
+| [docs/DAYTONA_PLAN.md](docs/DAYTONA_PLAN.md) | the original Daytona-based plan (superseded by the runner service) |
 | [docs/IDEA.md](docs/IDEA.md) | the presentation-generator concept |
 | [docs/PLAN.md](docs/PLAN.md) | build plan / tech-stack notes |

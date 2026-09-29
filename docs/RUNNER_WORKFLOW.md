@@ -1,4 +1,4 @@
-# Daytona workflow — PPTX generation
+# Runner workflow — PPTX generation
 
 How a chat message becomes rendered slides.
 
@@ -7,21 +7,21 @@ How a chat message becomes rendered slides.
 | Concern | Where | Notes |
 |---|---|---|
 | Decide whether to build; write / edit `python-pptx`; summarise | DeepSeek agent loop (`runTurn` + `streamAgentStep`) | `createSlides` tool, `tool_choice: "auto"` |
-| **Run** the tool's code → `deck.pptx` | **Daytona sandbox** (`runBuildInSandbox`) | generic Python image; `python-pptx` installed at runtime; untrusted code stays isolated |
+| **Run** the tool's code → `deck.pptx` | **`runner` service** (`postBuild` in `api/src/runner.ts`) | Python image with `python-pptx` pre-installed; no secrets, internal-only network; untrusted code stays isolated |
 | `deck.pptx` → `deck.pdf` → per-slide `.png` | **API process** (`pptxToSlides`) | fat image ships LibreOffice + poppler; plain `child_process` |
-| Store + serve the images | API — `STORAGE_DIR` + `GET /api/files/*` | |
+| Store + serve the images | API — `STORAGE_DIR` + `GET /api/chats/:chatId/decks/:version/{deck.pptx,deck.pdf,slides/N.png}` | |
 | Display | `SlideViewer` carousel | driven by `build:*` SSE events |
 
-The sandbox is created **lazily** on the first build in a chat and **reused** for
-later edits via `Chat.sandboxId` — the previous `deck.pptx` is still in its
-working directory, so edits are incremental.
+The runner is **stateless**: every `createSlides` call sends the model's *complete* program, which
+is run in a throwaway directory and discarded. Edits work because the previous program is in the
+model's context, not because a working directory persists.
 
 ---
 
 ## Flow — the agent loop (`api/src/pipeline.ts` `runTurn`)
 
 ```
-frontend                 api                              Daytona sandbox
+frontend                 api                              runner service
 ────────                 ───                              ───────────────
 send message ─POST──▶ build Responses `input[]` from DB
                      (assistant turns replay their stored `reasoning` items)
@@ -39,7 +39,7 @@ send message ─POST──▶ build Responses `input[]` from DB
                      │  createSlides({code}) ─▶ runBuild():              │
    ◀─ code {replace} ┤    (snap Code panel to the clean parsed code)     │
    ◀─ build:start ───┤    DeckVersion → "building"                       │
-   ◀─ build:progress ┤    runBuildInSandbox(code, chat.sandboxId) ──────▶ create/get, pip, run, download .pptx
+   ◀─ build:progress ┤    postBuild(chatId,msgId,code) ────────────────▶ /tmp/builds/<chat>/<msg>/, python build.py, return .pptx
    ◀─ build:progress ┤    pptxToSlides(pptxBytes)          [API host]    │
    ◀─ build:done ────┤    write files, DeckVersion → "ready" + Slides    │
                      │    input.push(...outputItems,                    │
@@ -48,7 +48,7 @@ send message ─POST──▶ build Responses `input[]` from DB
                      └───────────────────────────────────────────────────┘
    ◀─ message  "<the model's own summary>"
    ◀─ done
-   setDeck(deck) → <SlideViewer> renders <img src="/api/files/…">
+   setDeck(deck) → <SlideViewer> renders <img src="/api/chats/<id>/decks/<v>/slides/N.png">
 ```
 
 - **Greetings / questions** → the model returns prose, no tool call → one
@@ -61,23 +61,28 @@ send message ─POST──▶ build Responses `input[]` from DB
 
 ---
 
-## Sandbox details (`api/src/daytona.ts`)
+## Runner details
 
-- **Client** is created lazily so the app boots without `DAYTONA_API_KEY`.
-- **`getOrCreateSandbox(id?)`** — `daytona.get(id)` (reuse), falling back to
-  `daytona.create({ language: "python", autoStopInterval: 15, autoDeleteInterval: 60 })`
-  (minutes). Idle sandboxes stop after 15 min and are deleted 60 min later.
-- **`runBuildInSandbox(code, id?)`**:
-  1. `python -c 'import pptx' || pip install -q python-pptx || pip install -q --break-system-packages python-pptx`
-     — idempotent; ~instant on a warm sandbox
-  2. `fs.uploadFile(Buffer, "build.py")`
-  3. `process.executeCommand("python build.py", …, timeout 120s)` — non-zero exit
-     ⇒ throw with the combined stdout/stderr (`ExecuteResponse.result`)
-  4. `fs.downloadFile("deck.pptx")` → `Buffer`
-  5. return `{ pptxBytes, sandboxId }`
-- **`deleteSandbox(id)`** — called from `DELETE /api/chats/:id`.
+**API side (`api/src/runner.ts`)**
+- `postBuild(chatId, messageId, code)` runs inside a `p-limit(MAX_CONCURRENT_BUILDS)` slot and POSTs `{code}` to
+  `RUNNER_URL/build` (bearer `RUNNER_TOKEN`, 90 s abort). `isBusy()` lets the pipeline emit
+  "waiting for a free build slot".
+- `200` → `.pptx` bytes. `422` → `BuildError` with the program's output (fed back to the model).
+  `429`/`409`/`503`/network errors are retried with backoff, then thrown as a plain `Error`.
+- `checkRunner()` runs at boot (`index.ts`); stale `building` DeckVersions are failed on boot too.
 
-Measured: cold build ~3–4 s (create + install + run + download), warm reuse ~1 s.
+**Runner side (`runner/app.py`)**
+- `POST /build {chat_id, message_id, code}`: writes `build.py` into
+  `/tmp/builds/<chat_id>/<message_id>/` (real directories on the container's RAM-backed `/tmp`
+  tmpfs; `message_id` is the user message that triggered the turn). `mkdir` is the lock — a second
+  build for the same message gets `409`. Ids are validated against `^[A-Za-z0-9_-]{1,64}$` (`400`
+  otherwise). The message dir is deleted when the build ends (success, failure or timeout), then the
+  chat dir if empty; `/tmp/builds` is wiped on runner startup. Runs `python build.py` with a scrubbed
+  environment (`PATH`, `HOME` only), `RLIMIT_CPU/AS/FSIZE/NPROC`, a 60 s wall-clock timeout, and
+  its own process group (SIGKILL on timeout). Returns `deck.pptx`, or `422 {output}`.
+- Its own cap (`MAX_CONCURRENT`) returns `429` when full. `GET /health` for the compose healthcheck.
+- Compose hardening: `read_only`, `cap_drop: [ALL]`, `no-new-privileges`, `mem_limit`,
+  `pids_limit`, and an `internal: true` network — no route to the db or the internet.
 
 ## The model call (`api/src/llm.ts` `streamAgentStep`)
 
@@ -120,8 +125,19 @@ Measured: cold build ~3–4 s (create + install + run + download), warm reuse ~1
 
 | Item | Benefit |
 |---|---|
-| Custom Daytona **snapshot** with `python-pptx` baked in | drops the runtime `pip install` from the first build |
-| Kick off `getOrCreateSandbox` before the first `streamAgentStep` | hides sandbox-create latency |
+| Move LibreOffice/poppler into the runner | API becomes a plain Node image |
+| bubblewrap/nsjail or a fresh container per build | stronger isolation for untrusted public users |
 | Warm `soffice` once on API boot | first real conversion isn't the slow one (~3–5 s) |
 | PDF download button in `SlideViewer` | `deck.pdf` is already stored + served |
 | Persist per-step tool messages | full agent transcript survives reload (today it's one collapsed `Message`/turn) |
+
+## Where files live
+
+| Where | Path | Lifetime |
+|---|---|---|
+| runner (tmpfs) | `/tmp/builds/<chatId>/<messageId>/{build.py,deck.pptx}` | seconds — deleted when the build ends |
+| api (tmp) | `/tmp/deck-xxxx/` (LibreOffice profile, pdf, pngs) | seconds — deleted after render |
+| api (`STORAGE_DIR` volume) | `<chatId>/<version>/{deck.pptx,deck.pdf,slide-N.png}` | until the chat is deleted (`DELETE /api/chats/:id` removes `<chatId>/`) |
+
+One user message can trigger several builds (the model retries after an error, up to `MAX_STEPS`);
+they run sequentially, so they safely reuse the same `<messageId>` directory.

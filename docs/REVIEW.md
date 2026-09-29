@@ -2,7 +2,7 @@
 
 How one message travels from the input box to a rendered deck. This doc focuses
 on the **streaming mechanism**; the build/render internals are in
-[DAYTONA_WORKFLOW.md](DAYTONA_WORKFLOW.md). Snippets are trimmed — follow the file
+[RUNNER_WORKFLOW.md](RUNNER_WORKFLOW.md). Snippets are trimmed — follow the file
 links for full source.
 
 ```
@@ -14,7 +14,7 @@ App.handleSend  ──fetch POST──▶  persist user Message ──▶ emit "
    │                                        ▼
    │                              pipeline.runTurn(chatId, prompt, emit)   ── agent loop
    │   ◀── reasoning / token / code ────────┤  streamAgentStep → DeepSeek Responses API
-   │   ◀── build:start / build:progress ────┤  createSlides → sandbox → deck.pptx
+   │   ◀── build:start / build:progress ────┤  createSlides → runner → deck.pptx
    │   ◀── build:progress ──────────────────┤  API: pptx → pdf → slide PNGs
    │   ◀── build:done { deck } ─────────────┤  DeckVersion + Slide rows
    │   ◀── message "<the model's summary>"
@@ -202,7 +202,7 @@ app.post("/api/chats/:id/messages", async (req, reply) => {
 
 Builds the Responses `input[]`, then loops: stream a model step; if it calls
 `createSlides`, run the build and feed the result back; otherwise the prose is the
-final answer. Full internals in [DAYTONA_WORKFLOW.md](DAYTONA_WORKFLOW.md).
+final answer. Full internals in [RUNNER_WORKFLOW.md](RUNNER_WORKFLOW.md).
 
 ```ts
 export async function runTurn(chatId, userPrompt, emit): Promise<void> {
@@ -231,7 +231,7 @@ export async function runTurn(chatId, userPrompt, emit): Promise<void> {
     }
 
     emit({ type: "code", text: tool.code, replace: true });   // clean parsed code
-    const outcome = await runBuild(chatId, tool.code, emit);  // sandbox → render → DeckVersion, emits build:*
+    const outcome = await runBuild(chatId, tool.code, emit);  // runner → render → DeckVersion, emits build:*
 
     input.push(...outputItems);                                       // reasoning items + function_call
     input.push({ type: "function_call_output", call_id: tool.callId, output: outcome.toolResult });

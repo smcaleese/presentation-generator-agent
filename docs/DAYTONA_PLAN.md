@@ -1,3 +1,5 @@
+> **Superseded:** Daytona was replaced by the self-hosted `runner` service — see [RUNNER_WORKFLOW.md](RUNNER_WORKFLOW.md). Kept for history.
+
 # Implementation plan — Daytona deck-build flow
 
 > **Status: implemented, then evolved.** Phases 0–5 shipped, then the turn was
